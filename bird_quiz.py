@@ -143,6 +143,7 @@ if uploaded_files:
                         genai.configure(api_key=API_KEY)
                         
                         # ⭐️⭐️⭐️ [여기가 핵심] 최신형 2.5 Pro 모델 적용 ⭐️⭐️⭐️
+                        # 유료 1등급이라서 이제 이거 돌아갑니다!
                         model = genai.GenerativeModel('gemini-2.5-pro') 
                         
                         prompt = """
