@@ -18,11 +18,9 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 목록의 버튼과 텍스트 높이 맞추기 */
             div[data-testid="stHorizontalBlock"] {
                 align-items: center;
             }
-            /* 삭제 버튼 빨갛게 */
             button[kind="secondary"] {
                 border-color: #ffcccc;
                 color: #ff4b4b;
@@ -105,34 +103,33 @@ def delete_data(bird_name):
     except Exception as e:
         return str(e)
 
-# --- [4. AI 분석 함수 (업그레이드됨)] ---
+# --- [4. AI 분석 함수] ---
 def analyze_bird_image(image, user_doubt=None):
     try:
         genai.configure(api_key=API_KEY)
         model = genai.GenerativeModel('gemini-2.5-flash') 
         
         if user_doubt:
-            # 사용자가 반론을 제기했을 때의 프롬프트
             prompt = f"""
-            사용자는 이 사진이 '{user_doubt}'일 것이라고 생각합니다.
-            당신의 이전 판단과 사용자의 의견을 비교해서 다시 분석하세요.
+            사용자는 이 사진이 '{user_doubt}'일 것이라고 강력히 주장합니다.
+            당신의 이전 판단을 다시 검토하고, 사용자의 의견이 맞을 가능성을 진지하게 고려하세요.
             
             출력 형식:
             새이름 | 판단 이유 (한 문장으로 간략하게)
             
-            예시 1: 말똥가리 | 꼬리 깃의 패턴과 날개 모양이 말똥가리의 특징과 일치합니다.
-            예시 2: 흰꼬리수리 | 사용자의 의견도 일리 있지만, 부리의 노란색이 더 선명하여 흰꼬리수리가 맞습니다.
+            상황 1 (사용자 말이 맞을 때):
+            말똥가리 | 꼬리 깃 패턴을 다시 보니 사용자 말씀대로 말똥가리가 맞습니다.
+            
+            상황 2 (AI 말이 맞을 때):
+            흰꼬리수리 | 부리의 노란색 특징이 너무 명확하여 흰꼬리수리로 판단됩니다.
             """
         else:
-            # 기본 분석 프롬프트
             prompt = """
             사진 속 새의 '한국어 국명'을 정확히 식별하고, 그 이유를 짧게 설명하세요.
             새가 아니면 '새 아님'이라고 하세요.
             
             출력 형식:
             새이름 | 판단 이유 (한 문장으로 간략하게)
-            
-            예시: 직박구리 | 뺨의 갈색 얼룩과 회색 몸통이 직박구리의 전형적인 특징입니다.
             """
             
         response = model.generate_content([prompt, image])
@@ -188,7 +185,7 @@ with tab2:
     uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
     if 'ai_results' not in st.session_state:
-        st.session_state.ai_results = {} # {파일명: "이름 | 이유"}
+        st.session_state.ai_results = {} 
     if 'dismissed_files' not in st.session_state:
         st.session_state.dismissed_files = set()
 
@@ -202,7 +199,6 @@ with tab2:
             
             with st.spinner("AI가 분석 중..."):
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    # 람다 함수로 이미지 인자만 전달
                     new_results = list(executor.map(lambda img: analyze_bird_image(img), images))
             
             for f, res in zip(new_files, new_results):
@@ -214,17 +210,16 @@ with tab2:
         for file in active_files:
             raw_result = st.session_state.ai_results.get(file.name, "Error | 오류")
             
-            # 결과 파싱 ("이름 | 이유" 분리)
             if "|" in raw_result:
                 bird_name, reason = raw_result.split("|", 1)
                 bird_name = bird_name.strip()
                 reason = reason.strip()
             else:
                 bird_name = raw_result
-                reason = "이유를 불러오지 못했습니다."
+                reason = "결과 분석 중..."
 
             with st.container(border=True):
-                # 상단: 닫기 버튼
+                # 닫기 버튼
                 top_col1, top_col2 = st.columns([0.95, 0.05])
                 with top_col2:
                     if st.button("❌", key=f"close_{file.name}"):
@@ -241,7 +236,6 @@ with tab2:
                         st.markdown(f"### 👉 **{bird_name}**")
                         st.caption(f"No.{bird_no} | 💡 {reason}")
                         
-                        # 저장 상태 확인
                         is_saved = bird_name in df['bird_name'].values if 'bird_name' in df.columns else False
                         
                         if is_saved:
@@ -255,17 +249,17 @@ with tab2:
                                 else:
                                     st.error(f"실패: {res}")
                         
-                        # --- 💬 AI와 토론하기 (반론 제기) ---
+                        # --- 💬 AI와 토론하기 (수정됨: rerun 삭제) ---
                         with st.expander("🤔 다른 새 같은가요? (재분석 요청)"):
                             def retry_analysis(f_name, img_file):
                                 user_input = st.session_state[f"doubt_{f_name}"]
                                 if user_input:
-                                    with st.spinner(f"AI가 '{user_input}' 의견을 검토 중..."):
-                                        img = Image.open(img_file)
-                                        # 유저 의견을 넣어서 재분석
-                                        new_res = analyze_bird_image(img, user_doubt=user_input)
-                                        st.session_state.ai_results[f_name] = new_res
-                                        st.rerun() # 결과 갱신
+                                    # 여기서 스피너는 콜백 안이라서 화면에 안 보일 수 있으니 생략하거나 toast 사용
+                                    st.toast("AI가 의견을 듣고 다시 생각 중입니다... 🤔")
+                                    img = Image.open(img_file)
+                                    new_res = analyze_bird_image(img, user_doubt=user_input)
+                                    st.session_state.ai_results[f_name] = new_res
+                                    # ⭐️ st.rerun() 삭제함! (자동 리런됨)
 
                             st.text_input("어떤 새라고 생각하시나요?", key=f"doubt_{file.name}")
                             st.button("AI에게 다시 물어보기", key=f"ask_{file.name}", 
@@ -273,29 +267,25 @@ with tab2:
 
 # --- [6. 하단: 전체 기록 보기] ---
 st.divider()
-with st.expander("📜 전체 기록 보기", expanded=True): # 제목 수정됨
+with st.expander("📜 전체 기록 보기", expanded=True):
     if not df.empty and 'bird_name' in df.columns:
         for index, row in df.iterrows():
             bird = row['bird_name']
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            # ⭐️ 목록 디자인 압축 (여백 최소화)
-            col_txt, col_btn = st.columns([0.8, 0.2]) # 버튼 공간 확보
+            col_txt, col_btn = st.columns([0.8, 0.2])
             
             with col_txt:
-                # 수직 중앙 정렬 느낌을 위해 마크다운 조정
                 st.markdown(f"<div style='padding-top: 5px;'><b>{display_no}. {bird}</b></div>", unsafe_allow_html=True)
             
             with col_btn:
-                # 버튼을 오른쪽 끝으로 밀기 위한 빈 공간 대신 비율 조정 사용
                 if st.button("삭제", key=f"del_{index}_{bird}"):
                     res = delete_data(bird)
                     if res is True:
                         st.toast(f"🗑️ {bird} 삭제됨")
                         st.rerun()
             
-            # 구분선 대신 아주 얇은 여백으로 대체 (Divider 삭제)
             st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
             
     else:
