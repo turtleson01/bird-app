@@ -18,39 +18,52 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 1. 컬럼들이 좁아져도 절대 줄바꿈 하지 않게 강제 설정 */
+            /* 🚨 중요: 모바일에서도 컬럼이 절대 줄바꿈 되지 않도록 강제 설정 */
             div[data-testid="stHorizontalBlock"] {
-                flex-wrap: nowrap !important;
+                display: flex !important;
+                flex-direction: row !important; /* 무조건 가로로! */
+                flex-wrap: nowrap !important;   /* 줄바꿈 금지! */
                 align-items: center !important;
-                gap: 5px !important; /* 컬럼 사이 간격 최소화 */
             }
             
-            /* 2. 모바일에서 컬럼이 제멋대로 커지거나 작아지는 것 방지 (가장 중요!!) */
+            /* 컬럼들이 화면 너비를 100% 차지하지 않도록 제한 해제 */
             div[data-testid="column"] {
-                min-width: 0px !important; /* 최소 너비 제한 해제 */
                 width: auto !important;
                 flex: 1 1 auto !important;
-                padding: 0px !important; /* 컬럼 내부 패딩 제거 */
+                min-width: 0 !important; /* 내용물이 작아도 됨 */
+                padding: 0 5px !important; /* 컬럼 사이 간격 */
             }
 
-            /* 3. 삭제 버튼 스타일: 작고 단단하게 */
+            /* 삭제 버튼 스타일: 작고 단단하게 */
             button[kind="secondary"] {
                 border: 1px solid #ffcccc;
                 background-color: transparent;
                 color: #ff4b4b;
-                padding: 0px !important;
-                margin: 0px !important;
+                
+                /* 버튼 크기 강제 고정 */
+                width: auto !important;         
+                min-width: 40px !important;     
+                height: 35px !important;
+                padding: 0 10px !important;
+                margin: 0 !important;
+                
                 font-size: 0.8rem !important;
-                height: 32px !important;
-                line-height: 32px !important;
-                width: 100% !important; /* 할당된 칸을 꽉 채우되 넘치지 않게 */
                 border-radius: 8px;
+                white-space: nowrap !important; /* 줄바꿈 금지 */
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
             }
             
             /* 버튼 호버 효과 */
             button[kind="secondary"]:hover {
                 background-color: #fff0f0;
                 border-color: #ff4b4b;
+            }
+            
+            /* 구분선 여백 조정 */
+            hr {
+                margin: 0.5rem 0 !important;
             }
             </style>
             """
@@ -291,31 +304,29 @@ with st.expander("📜 전체 기록 보기", expanded=True):
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            # ⭐️ 비율: 이름(75%) : 버튼(25%)
-            # CSS로 min-width:0을 강제했으므로 좁은 화면에서도 25% 공간에 버튼이 딱 들어갑니다.
-            col_txt, col_btn = st.columns([0.75, 0.25])
+            # ⭐️ 이름과 버튼 배치 (비율 조정: 이름 7 : 버튼 3)
+            # CSS가 적용되어 있으므로 좁은 화면에서도 7:3 비율로 가로로 배치됩니다.
+            c1, c2 = st.columns([0.7, 0.3])
             
-            with col_txt:
-                # 텍스트가 너무 길면 ... 처리 (CSS)
+            with c1:
                 st.markdown(f"""
                 <div style='font-weight: 500; font-size: 0.95rem; 
                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-                            padding-left: 2px;'>
+                            line-height: 35px;'>
                     {display_no}. {bird}
                 </div>
                 """, unsafe_allow_html=True)
             
-            with col_btn:
-                # use_container_width=True를 써서 할당된 25% 공간을 꽉 채우되, 
-                # CSS로 padding을 없앴으므로 비대해지지 않습니다.
+            with c2:
+                # 버튼 (use_container_width=True 를 사용하여 할당된 30% 영역을 채움)
+                # CSS에서 max-width와 padding을 제한했으므로 '벽돌'처럼 되지 않습니다.
                 if st.button("삭제", key=f"del_{index}_{bird}", use_container_width=True):
                     res = delete_data(bird)
                     if res is True:
                         st.toast(f"🗑️ {bird} 삭제됨")
                         st.rerun()
             
-            # 구분선
-            st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
+            st.markdown("<hr>", unsafe_allow_html=True)
             
     else:
         st.caption("아직 기록된 새가 없습니다.")
