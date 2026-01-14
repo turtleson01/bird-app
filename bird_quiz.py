@@ -3,7 +3,6 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
 from PIL import Image
-import time  # ⭐️ 시간 지연을 위해 추가
 
 # --- [설정] ---
 try:
@@ -83,7 +82,7 @@ if not st.session_state.user_name:
     st.info("👈 닉네임을 먼저 입력해주세요.")
     st.stop()
 
-st.title("📸 AI 조류 도감")
+st.title("📸 AI 조류 도감 (Premium Pro)")
 
 # 통계 계산
 db_birds = get_user_data(st.session_state.user_name)
@@ -119,20 +118,18 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 st.divider()
 
 # ==========================================
-# 2. [안정성 개선] AI 분석 (속도 조절 + 에러 메시지 정리)
+# 2. [최고 성능 모드] Gemini 2.5 Pro 적용
 # ==========================================
 st.subheader("🤖 AI에게 물어보기")
 
 uploaded_files = st.file_uploader("사진을 여러 장 선택해도 됩니다", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
 if uploaded_files:
-    st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 분석합니다.")
+    st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 **최신형 모델(2.5 Pro)**로 정밀 분석합니다.")
     
     for i, file in enumerate(uploaded_files):
-        # ⭐️ [속도 조절] 너무 빨리 요청하면 429 에러 나니까 2초씩 쉼
-        if i > 0: 
-            time.sleep(2) 
-
+        # 유료니까 대기 시간(Sleep) 없음!
+        
         with st.container(border=True):
             col1, col2 = st.columns([1, 2])
             
@@ -141,10 +138,12 @@ if uploaded_files:
                 st.image(image, use_container_width=True)
             
             with col2:
-                with st.spinner(f"분석 중..."):
+                with st.spinner(f"정밀 판독 중..."):
                     try:
                         genai.configure(api_key=API_KEY)
-                        model = genai.GenerativeModel('gemini-2.5-flash')
+                        
+                        # ⭐️⭐️⭐️ [여기가 핵심] 최신형 2.5 Pro 모델 적용 ⭐️⭐️⭐️
+                        model = genai.GenerativeModel('gemini-2.5-pro') 
                         
                         prompt = """
                         당신은 한국의 야생 조류 전문가입니다.
@@ -161,9 +160,7 @@ if uploaded_files:
                         if ai_result == "새 아님":
                             st.error("새를 찾을 수 없습니다.")
                         else:
-                            # 1. 도감 리스트에 있는가?
                             if ai_result in birds:
-                                # 2. 이미 내가 등록했는가?
                                 if ai_result in my_birds:
                                     st.info("👋 이미 도감에 등록된 친구입니다.")
                                 else:
@@ -179,12 +176,7 @@ if uploaded_files:
                                 st.error(f"⚠️ '{ai_result}'은(는) 도감 목록에 없는 새입니다. (등록 불가)")
                                     
                     except Exception as e:
-                        # ⭐️ [에러 처리] 복잡한 영어 에러 대신 한글로 안내
-                        err_msg = str(e)
-                        if "429" in err_msg or "Quota" in err_msg:
-                            st.warning("⏳ 사용량이 몰려서 잠시 쉬고 있습니다. 10초 뒤에 다시 시도해주세요!")
-                        else:
-                            st.error(f"오류 발생: {err_msg[:50]}...") # 너무 길면 잘라서 보여줌
+                        st.error(f"오류: {e}")
 
 st.divider()
 
