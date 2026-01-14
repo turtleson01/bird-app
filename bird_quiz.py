@@ -9,7 +9,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 유지
+# CSS: 디자인 설정
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -28,14 +28,9 @@ hide_streamlit_style = """
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            .bird-item { 
-                font-size: 1.1rem; 
-                padding: 12px 5px; 
-                font-weight: 500; 
-                color: #333;
-            }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
+            /* 파란색 등록 버튼 */
             div.stButton > button[kind="primary"] {
                 background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
                 color: white !important;
@@ -51,6 +46,8 @@ hide_streamlit_style = """
                 transform: translateY(-2px);
                 box-shadow: 0 6px 12px rgba(0,0,0,0.2);
             }
+            
+            /* 빨간색 삭제 버튼 */
             div.stButton > button[kind="secondary"] {
                 background-color: white;
                 color: #ff4b4b;
@@ -68,7 +65,7 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 데이터 관리] ---
+# --- [2. 데이터 및 족보 관리] ---
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -193,13 +190,12 @@ with tab2:
                 bird_name = raw.strip()
                 reason = "상세 이유를 가져오지 못했습니다."
             
-            # 멍청한 답변 필터링
+            # 필터링
             invalid_keywords = ["새이름", "종명", "이름", "새 이름", "모름", "알수없음"]
             if bird_name in invalid_keywords:
                 bird_name = "판독 불가"
-                reason = "AI가 구체적인 종을 식별하지 못했습니다. 더 선명한 사진을 사용해보세요."
+                reason = "AI가 구체적인 종을 식별하지 못했습니다."
 
-            # 등록 가능 여부 체크
             is_valid_bird = True
             if bird_name in ["새 아님", "Error", "판독 불가"] or "오류" in bird_name:
                 is_valid_bird = False
@@ -254,10 +250,11 @@ if not df.empty:
         bird = row['bird_name']
         real_no = BIRD_MAP.get(bird, 9999)
         display_no = "??" if real_no == 9999 else real_no
-        # ⭐️ 요청하신 부분: No. 제거하고 '숫자. 이름' 형식으로 수정
+        
+        # ⭐️ 여기를 수정했습니다 (flex-start + gap)
         st.markdown(f"""
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
-            <span style="font-size:1.1rem; font-weight:600; color:#555;">{display_no}.</span>
+        <div style="display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:8px 0; border-bottom:1px solid #eee;">
+            <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
             <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}</span>
         </div>
         """, unsafe_allow_html=True)
