@@ -3,91 +3,120 @@ import google.generativeai as genai
 from PIL import Image
 import concurrent.futures 
 
-# --- [1. 기본 설정] ---
-# 복잡한 시트 설정 없이, 오직 AI 키 하나만 있으면 됩니다.
+# --- [1. 설정 & 디자인] ---
+st.set_page_config(page_title="나만의 탐조 도감", layout="wide", page_icon="🦅")
+
+# 진짜 앱처럼 보이게 하는 CSS
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            .stApp {padding-top: 10px;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# API 키 확인
 try:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
     st.error("설정(Secrets)에 GOOGLE_API_KEY가 없습니다.")
     st.stop()
 
-# --- [2. 앱처럼 보이게 하는 마법의 CSS] ---
-# 상단 메뉴, 바닥글 등을 숨겨서 진짜 앱처럼 깔끔하게 만듭니다.
-st.set_page_config(page_title="AI 조류 도감", layout="wide", page_icon="🦅")
+# --- [2. 임시 저장소 (세션)] ---
+# 구글 시트 대신, 앱이 켜져있는 동안만 기억하는 메모리입니다.
+if 'collected_birds' not in st.session_state:
+    st.session_state.collected_birds = []
 
-hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            .stApp {padding-top: 20px;}
-            </style>
-            """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-# --- [3. AI 분석 함수] ---
-# 민석님이 만족하신 '속도'와 '정확도'의 핵심 (Gemini 2.5 Flash)
+# --- [3. AI 분석 함수 (2.5 Flash)] ---
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
-        # 현존 가장 빠르고 가성비 좋은 모델
         model = genai.GenerativeModel('gemini-2.5-flash') 
-        
-        prompt = """
-        당신은 한국의 야생 조류 전문가입니다.
-        사진 속의 새를 식별하여 '한국어 국명'을 단어 하나로 답하세요.
-        한국 도심/공원에서 흔한 새(직박구리, 참새, 까치, 비둘기 등)일 확률을 우선 고려하세요.
-        만약 새가 아니라면 '새 아님'이라고 하세요.
-        """
+        prompt = "사진 속 새의 '한국어 국명'을 단어 하나로 답하시오. 새가 아니면 '새 아님'."
         response = model.generate_content([prompt, image])
         return response.text.strip()
-    except Exception as e:
-        return f"Error"
+    except:
+        return "Error"
 
-# --- [4. 메인 화면 UI] ---
-st.title("🦅 AI 조류 도감")
-st.caption("촬영한 사진을 올리면 AI가 즉시 분석합니다.")
+# --- [4. 메인 화면] ---
+st.title("🦅 나만의 탐조 도감")
 
-st.divider()
+# 📊 통계 박스 (디자인 복구)
+count = len(st.session_state.collected_birds)
+st.markdown(f"""
+    <div style="padding: 15px; border-radius: 12px; background-color: #e8f5e9; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 현재 채집한 새</span><br>
+        <span style="font-size: 2.2rem; font-weight: 800; color: #1b5e20; line-height: 1.2;">{count}</span>
+        <span style="font-size: 1.2rem; font-weight: 600; color: #333;"> 마리</span>
+    </div>
+""", unsafe_allow_html=True)
 
-# 파일 업로드 (카메라 촬영 or 갤러리 선택 가능)
-uploaded_files = st.file_uploader("📸 사진을 선택하거나 찍어주세요", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+# 탭으로 기능 분리 (깔끔하게)
+tab1, tab2 = st.tabs(["✍️ 직접 입력", "📸 AI 분석"])
 
-if uploaded_files:
-    # 이미지 로딩
-    images = [Image.open(file) for file in uploaded_files]
-    results = []
-
-    # 병렬 처리 (여러 장을 동시에 분석해서 속도 3배 향상)
-    with st.spinner("AI가 분석 중입니다..."):
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            results = list(executor.map(analyze_bird_image, images))
-
-    # 결과 출력
-    st.write(f"총 **{len(uploaded_files)}장** 분석 완료!")
+# ------------------------------------------------
+# 탭 1: 직접 입력 기능 (복구됨!)
+# ------------------------------------------------
+with tab1:
+    st.write("##### 발견한 새 이름을 직접 기록하세요")
     
-    for i, (file, ai_result) in enumerate(zip(uploaded_files, results)):
-        # 카드 형태의 깔끔한 디자인 유지
-        with st.container(border=True):
-            col1, col2 = st.columns([1, 2], gap="medium")
-            
-            with col1:
-                st.image(file, use_container_width=True)
-            
-            with col2:
-                if ai_result == "새 아님":
-                     st.warning("⚠️ 새가 아닙니다.")
-                elif "Error" in ai_result:
-                     st.error("분석 실패")
-                else:
-                     st.markdown(f"### 👉 **{ai_result}**")
-                     st.caption("한국 야생 조류 데이터베이스")
+    def add_manual():
+        name = st.session_state.input_bird.strip()
+        if name:
+            if name not in st.session_state.collected_birds:
+                st.session_state.collected_birds.append(name)
+                st.toast(f"✅ {name} 추가 완료!")
+            else:
+                st.warning("이미 목록에 있는 새입니다.")
+        st.session_state.input_bird = "" # 입력창 비우기
 
-else:
-    # 사진이 없을 때 보이는 안내 문구
-    st.info("👆 위 버튼을 눌러 사진을 올려보세요.")
-    st.markdown("""
-    **💡 팁:**
-    - 사진은 한 번에 여러 장 올릴 수 있습니다.
-    - 홈 화면에 추가하면 진짜 앱처럼 쓸 수 있습니다.
-    """)
+    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 참새, 까치")
+    st.caption("엔터를 치면 바로 추가됩니다.")
+
+# ------------------------------------------------
+# 탭 2: AI 사진 분석
+# ------------------------------------------------
+with tab2:
+    st.write("##### 사진을 올리면 AI가 이름을 찾아줍니다")
+    uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+
+    if uploaded_files:
+        st.write(f"⚡️ **{len(uploaded_files)}장** 분석 중...")
+        
+        images = [Image.open(file) for file in uploaded_files]
+        results = []
+
+        with st.spinner("AI가 눈을 부릅뜨고 찾는 중..."):
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                results = list(executor.map(analyze_bird_image, images))
+
+        for file, result in zip(uploaded_files, results):
+            with st.container(border=True):
+                c1, c2 = st.columns([1, 2])
+                with c1:
+                    st.image(file, use_container_width=True)
+                with c2:
+                    if result == "새 아님" or "Error" in result:
+                        st.error("새를 못 찾았어요.")
+                    else:
+                        st.markdown(f"### 👉 **{result}**")
+                        
+                        # 도감 추가 버튼
+                        if result not in st.session_state.collected_birds:
+                            if st.button(f"➕ 도감에 넣기", key=f"btn_{file.name}"):
+                                st.session_state.collected_birds.append(result)
+                                st.toast(f"🎉 {result} 획득!")
+                                st.rerun()
+                        else:
+                            st.info("✅ 이미 도감에 있습니다.")
+
+# --- [5. 하단: 내 도감 리스트] ---
+st.divider()
+with st.expander("📜 나의 도감 목록 보기", expanded=True):
+    if st.session_state.collected_birds:
+        # 예쁜 뱃지 스타일로 보여주기
+        st.markdown(" ".join([f"`{bird}`" for bird in st.session_state.collected_birds]), unsafe_allow_html=True)
+    else:
+        st.write("아직 발견한 새가 없습니다. 밖으로 나가보세요! 🔭")
