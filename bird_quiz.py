@@ -153,4 +153,41 @@ with tab2:
                 if c_top2.button("❌", key=f"cls_{file.name}"):
                     st.session_state.dismissed_files.add(file.name); st.rerun()
                 
-                c1, c2 = st
+                c1, c2 = st.columns([1, 2])
+                c1.image(file, use_container_width=True)
+                c2.markdown(f"### {bird_name.strip()}")
+                c2.caption(reason.strip())
+                if c2.button("➕ 도감에 추가", key=f"reg_{file.name}"):
+                    if save_data(bird_name.strip()) is True: 
+                        st.toast(f"✅ {bird_name.strip()} 등록 완료!")
+                        st.rerun()
+
+# --- 탭 3: 기록 관리 (삭제) ---
+with tab3:
+    st.subheader("데이터 관리")
+    if not df.empty:
+        st.write("지우고 싶은 새를 검색하거나 선택하세요.")
+        to_delete = st.multiselect("삭제 대상 선택", options=df['bird_name'].tolist(), help="이름을 입력하면 검색됩니다.")
+        
+        if st.button("선택한 항목 삭제", type="primary"):
+            if to_delete:
+                if delete_birds(to_delete) is True:
+                    st.success(f"성공적으로 {len(to_delete)}개의 데이터를 지웠습니다.")
+                    st.rerun()
+            else:
+                st.warning("삭제할 항목을 먼저 선택해주세요.")
+    else:
+        st.info("아직 등록된 기록이 없습니다.")
+
+# --- [5. 하단: 고정 목록 표시] ---
+st.divider()
+st.subheader("📜 나의 탐조 목록")
+if not df.empty:
+    for index, row in df.iterrows():
+        bird = row['bird_name']
+        real_no = BIRD_MAP.get(bird, 9999)
+        display_no = "??" if real_no == 9999 else real_no
+        st.markdown(f"<div class='bird-item'>{display_no}. {bird}</div>", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
+else:
+    st.caption("아직 기록이 없습니다. 위 탭을 이용해 새를 추가해보세요!")
