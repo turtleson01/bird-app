@@ -18,14 +18,24 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 가로 배열 시 수직 중앙 정렬 */
+            /* 버튼과 텍스트 수직 중앙 정렬 */
             div[data-testid="stHorizontalBlock"] {
                 align-items: center;
             }
-            /* 삭제 버튼 빨갛게 */
+            
+            /* 삭제 버튼 스타일: 빨간 테두리 + 빨간 글씨 */
             button[kind="secondary"] {
                 border-color: #ffcccc;
                 color: #ff4b4b;
+                padding: 0.25rem 0.5rem; /* 버튼 내부 여백을 줄여서 더 작게 만듦 */
+                font-size: 0.8rem;
+                height: auto;
+                line-height: 1.2;
+            }
+            
+            /* 모바일에서 열 간격 좁히기 */
+            div[data-testid="column"] {
+                padding: 0 !important;
             }
             </style>
             """
@@ -215,7 +225,7 @@ with tab2:
                 reason = "결과 분석 중..."
 
             with st.container(border=True):
-                top_col1, top_col2 = st.columns([0.95, 0.05])
+                top_col1, top_col2 = st.columns([0.9, 0.1])
                 with top_col2:
                     if st.button("❌", key=f"close_{file.name}"):
                         st.session_state.dismissed_files.add(file.name)
@@ -244,7 +254,6 @@ with tab2:
                                 else:
                                     st.error(f"실패: {res}")
                         
-                        # --- 💬 AI와 토론하기 ---
                         with st.expander("🤔 다른 새 같은가요?"):
                             def retry_analysis(f_name, img_file):
                                 user_input = st.session_state[f"doubt_{f_name}"]
@@ -253,7 +262,6 @@ with tab2:
                                     img = Image.open(img_file)
                                     new_res = analyze_bird_image(img, user_doubt=user_input)
                                     st.session_state.ai_results[f_name] = new_res
-                                    # 자동 리런됨
 
                             st.text_input("어떤 새라고 생각하시나요?", key=f"doubt_{file.name}")
                             st.button("재분석 요청", key=f"ask_{file.name}", 
@@ -268,15 +276,16 @@ with st.expander("📜 전체 기록 보기", expanded=True):
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            # ⭐️ [핵심 수정] 모바일에서 줄 바꿈 안 되게 비율 조정 (0.8/0.2 -> 0.65/0.35)
-            col_txt, col_btn = st.columns([0.65, 0.35])
+            # ⭐️ [수정] 모바일 화면에서도 한 줄에 나오도록 비율 조정 (0.75 vs 0.25)
+            # use_container_width=True 옵션을 제거해서 버튼 크기를 작게 만듦
+            col_txt, col_btn = st.columns([0.75, 0.25])
             
             with col_txt:
-                st.markdown(f"<div style='padding-top: 5px;'><b>{display_no}. {bird}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-weight: 500; font-size: 1rem;'>{display_no}. {bird}</div>", unsafe_allow_html=True)
             
             with col_btn:
-                # use_container_width=True 로 버튼이 칸을 꽉 채우게 (터치하기 좋음)
-                if st.button("삭제", key=f"del_{index}_{bird}", use_container_width=True):
+                # ⭐️ 거대해지는 옵션 삭제함
+                if st.button("삭제", key=f"del_{index}_{bird}"):
                     res = delete_data(bird)
                     if res is True:
                         st.toast(f"🗑️ {bird} 삭제됨")
