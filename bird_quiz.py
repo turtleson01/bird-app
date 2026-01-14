@@ -3,7 +3,7 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
 from PIL import Image
-import concurrent.futures # 병렬 처리 도구
+import concurrent.futures 
 
 # --- [설정] ---
 try:
@@ -36,17 +36,26 @@ def load_bird_data():
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# ⭐️ [핵심] 닉네임 정제 함수 (숫자/문자/소수점 오해 없애기)
+def clean_name(val):
+    s = str(val).strip() # 문자로 바꾸고 공백 제거
+    if s.endswith('.0'): # 혹시 123.0 처럼 소수점이 붙었다면
+        s = s[:-2]       # 뒤에 .0을 잘라버림
+    return s
+
 def get_user_data(user_name):
     try:
-        # ttl=0: 캐시 없이 항상 최신 데이터 읽어오기
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         
         if not df.empty and 'user_name' in df.columns:
-            # ⭐️⭐️⭐️ [여기가 핵심 수정] ⭐️⭐️⭐️
-            # 시트에 있는 닉네임을 강제로 '문자(str)'로 바꿔서 비교합니다.
-            # (이렇게 해야 숫자 123과 문자 "123"이 같다고 인식됩니다)
-            user_filter = df['user_name'].astype(str) == str(user_name)
-            return df[user_filter]['bird_name'].tolist()
+            # 1. 엑셀에 있는 모든 닉네임을 깨끗하게 청소 (123.0 -> 123)
+            df['clean_user'] = df['user_name'].apply(clean_name)
+            
+            # 2. 내가 입력한 닉네임도 깨끗하게 청소
+            target_name = clean_name(user_name)
+            
+            # 3. 비교
+            return df[df['clean_user'] == target_name]['bird_name'].tolist()
             
         return []
     except:
@@ -55,15 +64,17 @@ def get_user_data(user_name):
 def add_bird_to_sheet(user_name, bird_name):
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        # 저장할 때도 확실하게 문자로 변환해서 저장
-        new_row = pd.DataFrame({'user_name': [str(user_name)], 'bird_name': [bird_name]})
+        # 저장할 때 따옴표(')를 붙여서 강제로 문자열로 저장하는 꼼수 사용
+        # 이렇게 하면 엑셀이 숫자로 멋대로 바꾸지 않음
+        safe_name = str(user_name) 
+        new_row = pd.DataFrame({'user_name': [safe_name], 'bird_name': [bird_name]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
     except:
         return False
 
-# ⭐️ AI 분석 함수 (2.5 Flash + 유료 계정)
+# ⭐️ AI 분석 함수 (2.5 Flash)
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
@@ -95,10 +106,9 @@ if 'user_name' not in st.session_state:
 with st.sidebar:
     st.header("👤 사용자 설정")
     with st.form("login_sidebar"):
-        # 입력값 양옆 공백 제거 (.strip())
         input_name = st.text_input("닉네임", value=st.session_state.user_name)
         if st.form_submit_button("로그인"):
-            st.session_state.user_name = input_name.strip() # 공백 제거 후 저장
+            st.session_state.user_name = str(input_name).strip()
             st.session_state.local_updates = [] 
             st.rerun()
     
@@ -190,6 +200,18 @@ if uploaded_files:
                         st.error(f"⚠️ '{ai_result}'은(는) 도감 목록에 없는 새입니다. (등록 불가)")
 
 st.divider()
+
+# ==========================================
+# 🛠️ 문제 해결용 (내 데이터가 진짜 있는지 확인)
+# ==========================================
+with st.expander("🛠️ 데이터 진단 (내 기록이 안 보이면 눌러보세요)"):
+    try:
+        df_debug = conn.read(spreadsheet=SHEET_URL, ttl=0)
+        st.write("구글 시트에 저장된 원본 데이터(최근 5개):")
+        st.dataframe(df_debug.tail(5))
+        st.write(f"현재 접속한 닉네임: '{st.session_state.user_name}'")
+    except:
+        st.error("데이터를 읽어올 수 없습니다.")
 
 with st.expander("📜 전체 기록 보기"):
     st.write(f"총 {len(my_birds)}마리 발견")
