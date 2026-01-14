@@ -3,6 +3,7 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
 from PIL import Image
+import time  # ⭐️ 시간 지연을 위해 추가
 
 # --- [설정] ---
 try:
@@ -118,7 +119,7 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 st.divider()
 
 # ==========================================
-# 2. [UX 개선] AI 분석 (엄격 모드 + 메시지 변경)
+# 2. [안정성 개선] AI 분석 (속도 조절 + 에러 메시지 정리)
 # ==========================================
 st.subheader("🤖 AI에게 물어보기")
 
@@ -128,6 +129,10 @@ if uploaded_files:
     st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 분석합니다.")
     
     for i, file in enumerate(uploaded_files):
+        # ⭐️ [속도 조절] 너무 빨리 요청하면 429 에러 나니까 2초씩 쉼
+        if i > 0: 
+            time.sleep(2) 
+
         with st.container(border=True):
             col1, col2 = st.columns([1, 2])
             
@@ -153,7 +158,6 @@ if uploaded_files:
                         
                         st.subheader(f"👉 {ai_result}")
                         
-                        # [핵심 로직 변경]
                         if ai_result == "새 아님":
                             st.error("새를 찾을 수 없습니다.")
                         else:
@@ -163,10 +167,8 @@ if uploaded_files:
                                 if ai_result in my_birds:
                                     st.info("👋 이미 도감에 등록된 친구입니다.")
                                 else:
-                                    # [New] 새로운 종일 때 메시지
                                     st.success("🎉 새로운 종 추가! (등록해주세요)")
                                     
-                                    # 등록 버튼 (도감에 있고 + 미등록일 때만 보임)
                                     unique_key = f"btn_{i}_{file.name}"
                                     if st.button(f"➕ '{ai_result}' 도감에 넣기", key=unique_key):
                                         add_bird_to_sheet(st.session_state.user_name, ai_result)
@@ -174,11 +176,15 @@ if uploaded_files:
                                         st.toast(f"{ai_result} 저장 완료!")
                                         st.rerun()
                             else:
-                                # 도감 리스트에 없으면 -> 등록 불가 (버튼 없음)
                                 st.error(f"⚠️ '{ai_result}'은(는) 도감 목록에 없는 새입니다. (등록 불가)")
                                     
                     except Exception as e:
-                        st.error(f"오류: {e}")
+                        # ⭐️ [에러 처리] 복잡한 영어 에러 대신 한글로 안내
+                        err_msg = str(e)
+                        if "429" in err_msg or "Quota" in err_msg:
+                            st.warning("⏳ 사용량이 몰려서 잠시 쉬고 있습니다. 10초 뒤에 다시 시도해주세요!")
+                        else:
+                            st.error(f"오류 발생: {err_msg[:50]}...") # 너무 길면 잘라서 보여줌
 
 st.divider()
 
