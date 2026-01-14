@@ -5,7 +5,7 @@ import google.generativeai as genai
 from PIL import Image
 import concurrent.futures 
 from datetime import datetime
-import math
+import os
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
@@ -27,35 +27,78 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 구글 시트 연결] ---
+# --- [2. 원본 데이터(data.csv) 로드] ---
+# 옛날 코드의 핵심 기능을 가져왔습니다. '족보'를 읽는 역할입니다.
+@st.cache_data
+def load_reference_data():
+    file_path = "data.csv"
+    if not os.path.exists(file_path):
+        return {}
+    
+    encodings = ['utf-8-sig', 'cp949', 'euc-kr']
+    for enc in encodings:
+        try:
+            # CSV 읽기 (옛날 코드 로직 그대로)
+            df = pd.read_csv(file_path, skiprows=2, encoding=enc)
+            bird_data = df.iloc[:, [4]].dropna() # 이름 컬럼
+            bird_data.columns = ['name']
+            bird_data['name'] = bird_data['name'].str.strip()
+            bird_list = bird_data['name'].tolist()
+            
+            # { "참새": 1, "때까치": 256 ... } 형태로 맵핑 생성
+            # enumerate는 0부터 시작하므로 +1 해줍니다.
+            return {name: i + 1 for i, name in enumerate(bird_list)}
+        except Exception: 
+            continue
+    return {}
+
+# 족보(도감 번호표) 불러오기
+BIRD_MAP = load_reference_data()
+
+# --- [3. 구글 시트 연결 및 저장] ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         if df.empty:
-            # 엑셀에 아무것도 없으면 기본 틀 생성 (No, bird_name, date)
             return pd.DataFrame(columns=['No', 'bird_name', 'date'])
+        
+        # 가져온 데이터를 'No' 번호 순서대로(오름차순) 정렬
+        if 'No' in df.columns:
+            df['No_Numeric'] = pd.to_numeric(df['No'], errors='coerce')
+            df = df.sort_values(by='No_Numeric', ascending=True)
+            
         return df
     except:
         return pd.DataFrame(columns=['No', 'bird_name', 'date'])
 
 def save_data(bird_name):
     try:
+        bird_name = bird_name.strip()
         df = get_data()
         
-        # 1. 'No' 컬럼에서 가장 큰 숫자 찾기
-        next_no = 1
-        if 'No' in df.columns and not df.empty:
-            # 숫자가 아닌 값이 있어도 에러 안 나게 처리
-            max_val = pd.to_numeric(df['No'], errors='coerce').max()
-            if not pd.isna(max_val):
-                next_no = int(max_val) + 1
-            
+        # 이미 있는지 중복 체크
+        if bird_name in df['bird_name'].values:
+            return "이미 등록된 새입니다."
+
+        # ⭐️ [핵심] 족보(data.csv)에서 진짜 번호 찾기
+        if bird_name in BIRD_MAP:
+            real_no = BIRD_MAP[bird_name] # 예: 때까치면 256
+        else:
+            # 족보에 없는 새(오타거나 희귀종)라면? 
+            # 일단 가장 뒷번호(9000번대)로 임시 부여하거나, 기존 방식대로 마지막 번호+1
+            # 여기서는 구분하기 쉽게 9000번부터 시작하게 했습니다.
+            real_no = 9000 
+            if 'No' in df.columns and not df.empty:
+                max_val = pd.to_numeric(df['No'], errors='coerce').max()
+                if max_val >= 9000:
+                    real_no = int(max_val) + 1
+
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        # 2. 'No' 컬럼에 번호 넣어서 저장
-        new_row = pd.DataFrame({'No': [next_no], 'bird_name': [bird_name], 'date': [now]})
+        # 저장 (진짜 번호로 저장됨)
+        new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'date': [now]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
         
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
@@ -63,7 +106,7 @@ def save_data(bird_name):
     except Exception as e:
         return str(e)
 
-# --- [3. AI 분석 함수] ---
+# --- [4. AI 분석 함수] ---
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
@@ -74,8 +117,11 @@ def analyze_bird_image(image):
     except:
         return "Error"
 
-# --- [4. 메인 화면] ---
+# --- [5. 메인 화면] ---
 st.title("🦅 탐조 도감")
+
+if not BIRD_MAP:
+    st.warning("⚠️ 'data.csv' 파일을 찾지 못했습니다. 번호가 정확하지 않을 수 있습니다.")
 
 # 데이터 불러오기
 df = get_data()
@@ -104,12 +150,13 @@ with tab1:
             res = save_data(name)
             if res is True:
                 st.toast(f"✅ {name} 저장 완료!")
-                st.session_state.input_bird = ""
-                st.rerun() # 저장 후 바로 목록 갱신
+                st.session_state.input_bird = "" 
+            elif res == "이미 등록된 새입니다.":
+                st.warning(f"이미 도감에 있는 새입니다.")
             else:
                 st.error(f"저장 실패: {res}")
 
-    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 직박구리")
+    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 때까치")
 
 # ------------------------------------------------
 # 탭 2: AI 사진 분석
@@ -134,34 +181,36 @@ with tab2:
                     if result == "새 아님" or "Error" in result:
                         st.error("새를 못 찾았어요.")
                     else:
+                        # 족보에서 번호 찾아서 미리 보여주기
+                        bird_no = BIRD_MAP.get(result, "??")
                         st.markdown(f"### 👉 **{result}**")
+                        st.caption(f"도감 번호: {bird_no}번")
+                        
                         if st.button(f"➕ 저장하기", key=f"btn_{file.name}"):
                             res = save_data(result)
                             if res is True:
                                 st.toast(f"✅ {result} 도감에 영구 저장!")
                                 st.rerun()
+                            elif res == "이미 등록된 새입니다.":
+                                st.warning("이미 저장된 새입니다.")
                             else:
                                 st.error(f"저장 실패: {res}")
 
-# --- [5. 하단: 전체 기록 보기] ---
+# --- [6. 하단: 전체 기록 보기] ---
 st.divider()
-with st.expander("📜 전체 기록 보기 (등록순)", expanded=True):
+with st.expander("📜 전체 기록 보기 (도감 번호순)", expanded=True):
     if not df.empty and 'bird_name' in df.columns:
-        # ⭐️ 엑셀의 'No' 컬럼을 찾아서 그대로 보여줍니다.
-        
-        # 목록 출력 (위에서 아래로 순서대로)
+        # 이미 get_data()에서 번호순으로 정렬되어 넘어옵니다.
         for index, row in df.iterrows():
             bird = row['bird_name']
             
-            # 'No' 컬럼 값 가져오기
             if 'No' in df.columns and pd.notna(row['No']):
                 try:
-                    # 1.0 처럼 소수점으로 나오는 걸 방지하기 위해 int로 변환
                     num = int(row['No'])
                 except:
-                    num = row['No'] # 숫자가 아니면 그대로 출력
+                    num = row['No']
             else:
-                num = index + 1 # No가 없으면 그냥 순서대로
+                num = "??"
                 
             st.markdown(f"**{num}. {bird}**")
             
