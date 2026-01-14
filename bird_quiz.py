@@ -18,7 +18,6 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 요약 정보 박스 스타일 */
             .summary-box {
                 padding: 20px; 
                 border-radius: 12px; 
@@ -26,23 +25,9 @@ hide_streamlit_style = """
                 border-left: 5px solid #2e7d32;
                 margin-bottom: 25px;
             }
-            .summary-text {
-                font-size: 1.2rem; 
-                color: #2e7d32; 
-                font-weight: bold;
-            }
-            .summary-count {
-                font-size: 1.8rem; 
-                font-weight: 800; 
-                color: #1b5e20;
-            }
-
-            /* 목록 아이템 스타일 */
-            .bird-item {
-                font-size: 1.05rem;
-                padding: 8px 0;
-                font-weight: 500;
-            }
+            .summary-text { font-size: 1.2rem; color: #2e7d32; font-weight: bold; }
+            .summary-count { font-size: 1.8rem; font-weight: 800; color: #1b5e20; }
+            .bird-item { font-size: 1.05rem; padding: 8px 0; font-weight: 500; }
             hr { margin: 0.4rem 0 !important; }
             </style>
             """
@@ -85,17 +70,26 @@ def get_data():
     except: return pd.DataFrame(columns=['No', 'bird_name', 'date'])
 
 def save_data(bird_name):
+    bird_name = bird_name.strip()
+    
+    # ⭐️ 1단계: 족보(BIRD_MAP)에 있는 이름인지 확인
+    if bird_name not in BIRD_MAP:
+        return f"'{bird_name}'은(는) 도감 목록에 없는 이름입니다. 정확한 국명을 입력해주세요."
+
     try:
-        bird_name = bird_name.strip()
         df = get_data()
-        if bird_name in df['bird_name'].values: return "이미 등록된 새입니다."
+        # ⭐️ 2단계: 이미 등록된 새인지 확인
+        if bird_name in df['bird_name'].values: 
+            return "이미 등록된 새입니다."
+        
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        real_no = BIRD_MAP.get(bird_name, 9999)
+        real_no = BIRD_MAP.get(bird_name)
         new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'date': [now]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
-    except Exception as e: return str(e)
+    except Exception as e: 
+        return str(e)
 
 def delete_birds(bird_names_to_delete):
     try:
@@ -121,7 +115,6 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ 수정된 상단 요약 정보 (문구 변경 및 글자 크기 확대)
 st.markdown(f"""
     <div class="summary-box">
         <span class="summary-text">🌱 총 발견한 종 : </span>
@@ -130,10 +123,9 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 탭 구성: 직접 입력 - AI 분석 - 기록 관리
 tab1, tab2, tab3 = st.tabs(["✍️ 직접 입력", "📸 AI 분석", "🛠️ 기록 관리"])
 
-# --- 탭 1: 직접 입력 ---
+# --- 탭 1: 직접 입력 (검증 로직 강화) ---
 with tab1:
     st.subheader("새 이름 직접 기록")
     def add_manual():
@@ -143,8 +135,15 @@ with tab1:
             if res is True: 
                 st.toast(f"✅ {name} 등록 완료!")
                 st.session_state.input_bird = ""
-            else: st.error(res)
-    st.text_input("발견한 새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
+            else:
+                # 족보에 없거나 중복일 경우 에러 메시지 출력
+                st.error(res)
+    
+    st.text_input("발견한 새 이름을 입력하세요 (엔터 시 등록)", 
+                  key="input_bird", 
+                  on_change=add_manual, 
+                  placeholder="예: 참새, 맷도요 등")
+    st.caption("※ data.csv 파일에 등록된 정확한 한국어 국명만 등록 가능합니다.")
 
 # --- 탭 2: AI 분석 ---
 with tab2:
@@ -163,6 +162,7 @@ with tab2:
             
             raw = st.session_state.ai_results[file.name]
             bird_name, reason = raw.split("|") if "|" in raw else (raw, "분석 완료")
+            bird_name = bird_name.strip()
             
             with st.container(border=True):
                 c_top1, c_top2 = st.columns([0.9, 0.1])
@@ -171,20 +171,23 @@ with tab2:
                 
                 c1, c2 = st.columns([1, 2])
                 c1.image(file, use_container_width=True)
-                c2.markdown(f"### {bird_name.strip()}")
+                c2.markdown(f"### {bird_name}")
                 c2.caption(reason.strip())
+                
                 if c2.button("➕ 도감에 추가", key=f"reg_{file.name}"):
-                    if save_data(bird_name.strip()) is True: 
-                        st.toast(f"✅ {bird_name.strip()} 등록 완료!")
+                    # AI 분석 결과도 save_data를 통해 검증을 거칩니다.
+                    res = save_data(bird_name)
+                    if res is True: 
+                        st.toast(f"✅ {bird_name} 등록 완료!")
                         st.rerun()
+                    else:
+                        st.error(res)
 
 # --- 탭 3: 기록 관리 (삭제) ---
 with tab3:
     st.subheader("데이터 관리")
     if not df.empty:
-        st.write("지우고 싶은 새를 검색하거나 선택하세요.")
         to_delete = st.multiselect("삭제 대상 선택", options=df['bird_name'].tolist())
-        
         if st.button("선택한 항목 삭제", type="primary"):
             if to_delete:
                 if delete_birds(to_delete) is True:
