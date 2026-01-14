@@ -58,7 +58,7 @@ def add_bird_to_sheet(user_name, bird_name):
 st.set_page_config(page_title="AI 조류 도감", layout="wide", page_icon="🐦")
 birds, bird_order_map, family_group = load_bird_data()
 
-# 임시 저장소 (즉시 반응용)
+# 임시 저장소
 if 'local_updates' not in st.session_state:
     st.session_state.local_updates = []
 
@@ -118,36 +118,34 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 st.divider()
 
 # ==========================================
-# 2. [업그레이드] AI 사진 분석 (여러 장 동시 업로드)
+# 2. [UX 개선] AI 분석 (엄격 모드 + 메시지 변경)
 # ==========================================
 st.subheader("🤖 AI에게 물어보기")
 
-# accept_multiple_files=True 로 변경!
 uploaded_files = st.file_uploader("사진을 여러 장 선택해도 됩니다", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
 if uploaded_files:
     st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 분석합니다.")
     
-    # 여러 장을 하나씩 반복하며 처리
     for i, file in enumerate(uploaded_files):
-        # 각각의 사진을 깔끔한 상자(Container)에 담아서 보여줌
         with st.container(border=True):
-            col1, col2 = st.columns([1, 2]) # 왼쪽: 사진, 오른쪽: 결과
+            col1, col2 = st.columns([1, 2])
             
             with col1:
                 image = Image.open(file)
                 st.image(image, use_container_width=True)
             
             with col2:
-                with st.spinner(f"{i+1}번째 사진 분석 중..."):
+                with st.spinner(f"분석 중..."):
                     try:
                         genai.configure(api_key=API_KEY)
-                        model = genai.GenerativeModel('gemini-2.5-flash') # 속도 중요하므로 Flash 추천
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         
                         prompt = """
                         당신은 한국의 야생 조류 전문가입니다.
                         사진 속의 새를 식별하여 '한국어 국명'을 단어 하나로 답하세요.
                         한국 도심/공원에서 흔한 새(직박구리, 참새, 까치 등)일 확률을 우선 고려하세요.
+                        만약 새가 아니라면 '새 아님'이라고 하세요.
                         """
                         
                         response = model.generate_content([prompt, image])
@@ -155,26 +153,29 @@ if uploaded_files:
                         
                         st.subheader(f"👉 {ai_result}")
                         
+                        # [핵심 로직 변경]
                         if ai_result == "새 아님":
-                            st.caption("새를 찾을 수 없습니다.")
+                            st.error("새를 찾을 수 없습니다.")
                         else:
-                            is_in_book = ai_result in birds
-                            if is_in_book:
-                                st.caption("📚 도감에 있는 새입니다.")
-                            else:
-                                st.caption("⚠️ 도감 목록엔 없지만 등록 가능합니다.")
-                            
-                            # 버튼 키(key)를 사진마다 다르게 설정해야 에러가 안 남
-                            unique_key = f"btn_{i}_{file.name}"
-                            
-                            if st.button(f"➕ '{ai_result}' 등록", key=unique_key):
-                                if ai_result not in my_birds:
-                                    add_bird_to_sheet(st.session_state.user_name, ai_result)
-                                    st.session_state.local_updates.append(ai_result)
-                                    st.toast(f"{ai_result} 저장 완료!")
-                                    st.rerun()
+                            # 1. 도감 리스트에 있는가?
+                            if ai_result in birds:
+                                # 2. 이미 내가 등록했는가?
+                                if ai_result in my_birds:
+                                    st.info("👋 이미 도감에 등록된 친구입니다.")
                                 else:
-                                    st.warning("이미 등록된 새입니다.")
+                                    # [New] 새로운 종일 때 메시지
+                                    st.success("🎉 새로운 종 추가! (등록해주세요)")
+                                    
+                                    # 등록 버튼 (도감에 있고 + 미등록일 때만 보임)
+                                    unique_key = f"btn_{i}_{file.name}"
+                                    if st.button(f"➕ '{ai_result}' 도감에 넣기", key=unique_key):
+                                        add_bird_to_sheet(st.session_state.user_name, ai_result)
+                                        st.session_state.local_updates.append(ai_result)
+                                        st.toast(f"{ai_result} 저장 완료!")
+                                        st.rerun()
+                            else:
+                                # 도감 리스트에 없으면 -> 등록 불가 (버튼 없음)
+                                st.error(f"⚠️ '{ai_result}'은(는) 도감 목록에 없는 새입니다. (등록 불가)")
                                     
                     except Exception as e:
                         st.error(f"오류: {e}")
