@@ -16,6 +16,10 @@ hide_streamlit_style = """
             footer {visibility: hidden;}
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
+            /* 닫기 버튼 스타일 조정 */
+            div[data-testid="stButton"] > button {
+                border-radius: 8px;
+            }
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -27,13 +31,12 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 족보(data.csv) 로드 함수] ---
+# --- [2. 족보(data.csv) 로드] ---
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
     if not os.path.exists(file_path):
         return {}
-    
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
@@ -49,7 +52,7 @@ def load_bird_map():
 
 BIRD_MAP = load_bird_map()
 
-# --- [3. 구글 시트 데이터 로드] ---
+# --- [3. 구글 시트 연결 및 관리] ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
@@ -86,6 +89,17 @@ def save_data(bird_name):
     except Exception as e:
         return str(e)
 
+# ⭐️ [추가된 기능] 데이터 삭제 함수
+def delete_data(bird_name):
+    try:
+        df = get_data()
+        # 해당 이름이 아닌 것만 남김 (필터링) -> 즉, 삭제
+        df = df[df['bird_name'] != bird_name]
+        conn.update(spreadsheet=SHEET_URL, data=df)
+        return True
+    except Exception as e:
+        return str(e)
+
 # --- [4. AI 분석 함수] ---
 def analyze_bird_image(image):
     try:
@@ -101,7 +115,7 @@ def analyze_bird_image(image):
 st.title("🦅 탐조 도감")
 
 if not BIRD_MAP:
-    st.error("⚠️ 'data.csv' 파일을 찾을 수 없습니다! 프로젝트 폴더에 파일을 넣어주세요.")
+    st.error("⚠️ 'data.csv' 파일을 찾을 수 없습니다!")
 
 df = get_data()
 count = len(df)
@@ -144,18 +158,25 @@ with tab2:
     st.write("##### 📸 사진으로 새 이름 찾기")
     uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
+    # 세션 상태 초기화
     if 'ai_results' not in st.session_state:
         st.session_state.ai_results = {}
-        
-    # ⭐️ 방금 저장한 새를 기억하는 변수
     if 'last_saved_bird' not in st.session_state:
         st.session_state.last_saved_bird = None
+    
+    # ⭐️ 닫기 버튼 누른 파일들을 기억하는 장소
+    if 'dismissed_files' not in st.session_state:
+        st.session_state.dismissed_files = set()
 
     if uploaded_files:
-        new_files = [f for f in uploaded_files if f.name not in st.session_state.ai_results]
+        # 닫기 버튼 누른 건 목록에서 제외하고 처리
+        active_files = [f for f in uploaded_files if f.name not in st.session_state.dismissed_files]
+        
+        # 새로운 파일 분석
+        new_files = [f for f in active_files if f.name not in st.session_state.ai_results]
         
         if new_files:
-            st.write(f"⚡️ **새로운 {len(new_files)}장** 분석 중...")
+            st.write(f"⚡️ **{len(new_files)}장** 분석 중...")
             images = [Image.open(f) for f in new_files]
             
             with st.spinner("AI가 분석 중..."):
@@ -165,10 +186,22 @@ with tab2:
             for f, res in zip(new_files, new_results):
                 st.session_state.ai_results[f.name] = res
 
-        for file in uploaded_files:
+        # 결과 보여주기 Loop
+        if not active_files and uploaded_files:
+            st.info("모든 사진을 닫았습니다. 다시 분석하려면 파일을 다시 올려주세요.")
+
+        for file in active_files:
             result = st.session_state.ai_results.get(file.name, "Error")
             
             with st.container(border=True):
+                # ⭐️ 상단: 닫기 버튼 (X) 배치 (오른쪽 끝)
+                top_col1, top_col2 = st.columns([0.9, 0.1])
+                with top_col2:
+                    # X 버튼 누르면 dismissed 목록에 추가하고 새로고침
+                    if st.button("❌", key=f"close_{file.name}", help="이 결과 닫기"):
+                        st.session_state.dismissed_files.add(file.name)
+                        st.rerun()
+
                 c1, c2 = st.columns([1, 2])
                 with c1: st.image(file, use_container_width=True)
                 with c2:
@@ -181,19 +214,16 @@ with tab2:
                         
                         is_saved = result in df['bird_name'].values if 'bird_name' in df.columns else False
                         
-                        # ⭐️ 메시지 구분 로직
                         if is_saved:
                             if st.session_state.last_saved_bird == result:
-                                # 방금 내가 누른 것
                                 st.success("🎉 방금 등록되었습니다!")
                             else:
-                                # 예전에 저장했던 것
                                 st.info("✅ 도감에 보관 중입니다")
                         else:
                             if st.button(f"➕ 저장하기", key=f"btn_{file.name}"):
                                 res = save_data(result)
                                 if res is True:
-                                    st.session_state.last_saved_bird = result # 기억하기
+                                    st.session_state.last_saved_bird = result
                                     st.toast(f"🎉 {result} 저장 완료!")
                                     st.rerun()
                                 else:
@@ -206,13 +236,25 @@ with st.expander("📜 전체 기록 보기 (도감 번호순)", expanded=True):
         for index, row in df.iterrows():
             bird = row['bird_name']
             real_no = BIRD_MAP.get(bird, 9999)
+            display_no = "??" if real_no == 9999 else real_no
             
-            if real_no == 9999:
-                display_no = "??"
-            else:
-                display_no = real_no
-                
-            st.markdown(f"**{display_no}. {bird}**")
+            # ⭐️ 목록 옆에 삭제 버튼 추가 (레이아웃 나누기)
+            col_txt, col_btn = st.columns([0.85, 0.15])
+            
+            with col_txt:
+                st.markdown(f"**{display_no}. {bird}**")
+            
+            with col_btn:
+                # 삭제 버튼 누르면 즉시 삭제
+                if st.button("삭제", key=f"del_{index}_{bird}"):
+                    res = delete_data(bird)
+                    if res is True:
+                        st.toast(f"🗑️ {bird} 삭제 완료!")
+                        st.rerun()
+                    else:
+                        st.error("삭제 실패")
+            
+            st.divider() # 구분선 추가
             
     else:
         st.caption("아직 기록된 새가 없습니다.")
