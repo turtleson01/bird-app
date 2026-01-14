@@ -38,9 +38,16 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_user_data(user_name):
     try:
+        # ttl=0: 캐시 없이 항상 최신 데이터 읽어오기
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
+        
         if not df.empty and 'user_name' in df.columns:
-            return df[df['user_name'] == user_name]['bird_name'].tolist()
+            # ⭐️⭐️⭐️ [여기가 핵심 수정] ⭐️⭐️⭐️
+            # 시트에 있는 닉네임을 강제로 '문자(str)'로 바꿔서 비교합니다.
+            # (이렇게 해야 숫자 123과 문자 "123"이 같다고 인식됩니다)
+            user_filter = df['user_name'].astype(str) == str(user_name)
+            return df[user_filter]['bird_name'].tolist()
+            
         return []
     except:
         return []
@@ -48,20 +55,18 @@ def get_user_data(user_name):
 def add_bird_to_sheet(user_name, bird_name):
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        new_row = pd.DataFrame({'user_name': [user_name], 'bird_name': [bird_name]})
+        # 저장할 때도 확실하게 문자로 변환해서 저장
+        new_row = pd.DataFrame({'user_name': [str(user_name)], 'bird_name': [bird_name]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
     except:
         return False
 
-# ⭐️ [핵심] AI 분석 함수
-# 2.5 Flash 모델 사용 (존재 확인됨 + 속도 빠름 + 유료 계정이라 제한 없음)
+# ⭐️ AI 분석 함수 (2.5 Flash + 유료 계정)
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
-        
-        # 404 안 뜨는 확실한 모델 'gemini-2.5-flash' 사용
         model = genai.GenerativeModel('gemini-2.5-flash') 
         
         prompt = """
@@ -90,9 +95,10 @@ if 'user_name' not in st.session_state:
 with st.sidebar:
     st.header("👤 사용자 설정")
     with st.form("login_sidebar"):
+        # 입력값 양옆 공백 제거 (.strip())
         input_name = st.text_input("닉네임", value=st.session_state.user_name)
         if st.form_submit_button("로그인"):
-            st.session_state.user_name = input_name
+            st.session_state.user_name = input_name.strip() # 공백 제거 후 저장
             st.session_state.local_updates = [] 
             st.rerun()
     
@@ -138,9 +144,7 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 
 st.divider()
 
-# ==========================================
-# 2. [병렬 처리 모드] 2.5 Flash + 심플 멘트
-# ==========================================
+# 2. AI 분석 (병렬 처리 + 심플 멘트)
 st.subheader("🤖 AI에게 물어보기")
 
 uploaded_files = st.file_uploader("사진을 여러 장 선택해도 됩니다", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
@@ -151,13 +155,10 @@ if uploaded_files:
     images = [Image.open(file) for file in uploaded_files]
     results = []
 
-    # ⭐️ 멘트: "분석 중..." 하나로 심플하게 통일
     with st.spinner("분석 중..."):
-        # 병렬 처리로 여러 장 동시에 요청 (속도 극대화)
         with concurrent.futures.ThreadPoolExecutor() as executor:
             results = list(executor.map(analyze_bird_image, images))
 
-    # 결과 출력
     for i, (file, ai_result) in enumerate(zip(uploaded_files, results)):
         with st.container(border=True):
             col1, col2 = st.columns([1, 2])
@@ -166,10 +167,8 @@ if uploaded_files:
                 st.image(file, use_container_width=True)
             
             with col2:
-                # 결과 헤더
                 st.subheader(f"👉 {ai_result}")
                 
-                # 에러 및 결과 처리
                 if "Error" in ai_result:
                     st.error(f"오류가 발생했습니다: {ai_result}")
                 elif ai_result == "새 아님":
