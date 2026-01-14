@@ -58,7 +58,6 @@ def get_data():
         if df.empty:
             return pd.DataFrame(columns=['No', 'bird_name', 'date'])
         
-        # 족보 보고 번호 교정 및 정렬
         if BIRD_MAP and 'bird_name' in df.columns:
             df['real_no'] = df['bird_name'].apply(lambda x: BIRD_MAP.get(str(x).strip(), 9999))
             df = df.sort_values(by='real_no', ascending=True)
@@ -73,7 +72,6 @@ def save_data(bird_name):
         bird_name = bird_name.strip()
         df = get_data()
         
-        # 중복 체크
         if 'bird_name' in df.columns and bird_name in df['bird_name'].values:
             return "이미 등록된 새입니다."
 
@@ -105,7 +103,6 @@ st.title("🦅 탐조 도감")
 if not BIRD_MAP:
     st.error("⚠️ 'data.csv' 파일을 찾을 수 없습니다! 프로젝트 폴더에 파일을 넣어주세요.")
 
-# 데이터 불러오기
 df = get_data()
 count = len(df)
 
@@ -141,21 +138,22 @@ with tab1:
     st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 참새")
 
 # ------------------------------------------------
-# 탭 2: AI 사진 분석 (⭐️ 버그 수정된 부분)
+# 탭 2: AI 사진 분석
 # ------------------------------------------------
 with tab2:
     st.write("##### 📸 사진으로 새 이름 찾기")
     uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
-    # ⭐️ AI 분석 결과를 기억할 저장소 생성
     if 'ai_results' not in st.session_state:
         st.session_state.ai_results = {}
+        
+    # ⭐️ 방금 저장한 새를 기억하는 변수
+    if 'last_saved_bird' not in st.session_state:
+        st.session_state.last_saved_bird = None
 
     if uploaded_files:
-        # 1. 새로 올라온 파일만 골라내기 (이미 분석한 건 패스)
         new_files = [f for f in uploaded_files if f.name not in st.session_state.ai_results]
         
-        # 2. 새로운 파일만 AI에게 분석 시키기
         if new_files:
             st.write(f"⚡️ **새로운 {len(new_files)}장** 분석 중...")
             images = [Image.open(f) for f in new_files]
@@ -164,13 +162,10 @@ with tab2:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     new_results = list(executor.map(analyze_bird_image, images))
             
-            # 3. 결과를 기억 저장소에 저장
             for f, res in zip(new_files, new_results):
                 st.session_state.ai_results[f.name] = res
 
-        # 4. 기억해둔 결과 보여주기
         for file in uploaded_files:
-            # 기억장소에서 결과 꺼내오기
             result = st.session_state.ai_results.get(file.name, "Error")
             
             with st.container(border=True):
@@ -184,18 +179,23 @@ with tab2:
                         st.markdown(f"### 👉 **{result}**")
                         st.caption(f"도감 번호: {bird_no}번")
                         
-                        # 이미 저장된 건지 미리 확인 (버튼 UX 개선)
                         is_saved = result in df['bird_name'].values if 'bird_name' in df.columns else False
                         
+                        # ⭐️ 메시지 구분 로직
                         if is_saved:
-                            st.success("✅ 이미 도감에 있습니다")
+                            if st.session_state.last_saved_bird == result:
+                                # 방금 내가 누른 것
+                                st.success("🎉 방금 등록되었습니다!")
+                            else:
+                                # 예전에 저장했던 것
+                                st.info("✅ 도감에 보관 중입니다")
                         else:
-                            # ⭐️ 버튼을 눌러도 이제 AI 분석을 다시 하지 않으므로 저장이 잘 됨!
                             if st.button(f"➕ 저장하기", key=f"btn_{file.name}"):
                                 res = save_data(result)
                                 if res is True:
+                                    st.session_state.last_saved_bird = result # 기억하기
                                     st.toast(f"🎉 {result} 저장 완료!")
-                                    st.rerun() # 목록 갱신을 위해 새로고침
+                                    st.rerun()
                                 else:
                                     st.error(f"저장 실패: {res}")
 
