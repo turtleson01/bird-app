@@ -193,8 +193,7 @@ with tab2:
                 bird_name = raw.strip()
                 reason = "상세 이유를 가져오지 못했습니다."
             
-            # ⭐️ [핵심 수정] 멍청한 답변 강제 필터링
-            # AI가 '새이름', '종명' 이라고 말하면 강제로 '판독 불가'로 처리
+            # 멍청한 답변 필터링
             invalid_keywords = ["새이름", "종명", "이름", "새 이름", "모름", "알수없음"]
             if bird_name in invalid_keywords:
                 bird_name = "판독 불가"
@@ -228,7 +227,6 @@ with tab2:
                     else:
                         st.warning(f"⚠️ **{bird_name}**")
                         st.write(reason)
-                        # 버튼 숨김
 
                     st.divider()
                     c_ask1, c_ask2 = st.columns([0.7, 0.3])
@@ -256,9 +254,10 @@ if not df.empty:
         bird = row['bird_name']
         real_no = BIRD_MAP.get(bird, 9999)
         display_no = "??" if real_no == 9999 else real_no
+        # ⭐️ 요청하신 부분: No. 제거하고 '숫자. 이름' 형식으로 수정
         st.markdown(f"""
         <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
-            <span style="font-size:1.1rem; font-weight:600; color:#555;">No.{display_no}</span>
+            <span style="font-size:1.1rem; font-weight:600; color:#555;">{display_no}.</span>
             <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}</span>
         </div>
         """, unsafe_allow_html=True)
