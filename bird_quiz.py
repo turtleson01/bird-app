@@ -116,12 +116,6 @@ def analyze_bird_image(image, user_doubt=None):
             
             출력 형식:
             새이름 | 판단 이유 (한 문장으로 간략하게)
-            
-            상황 1 (사용자 말이 맞을 때):
-            말똥가리 | 꼬리 깃 패턴을 다시 보니 사용자 말씀대로 말똥가리가 맞습니다.
-            
-            상황 2 (AI 말이 맞을 때):
-            흰꼬리수리 | 부리의 노란색 특징이 너무 명확하여 흰꼬리수리로 판단됩니다.
             """
         else:
             prompt = """
@@ -168,12 +162,12 @@ with tab1:
         if name:
             res = save_data(name)
             if res is True:
-                st.toast(f"✅ {name} 저장 완료!")
+                st.toast(f"✅ {name} 등록 완료!")
                 st.session_state.input_bird = ""
             elif res == "이미 등록된 새입니다.":
                 st.warning("이미 도감에 있습니다.")
             else:
-                st.error(f"저장 실패: {res}")
+                st.error(f"등록 실패: {res}")
 
     st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 참새")
 
@@ -241,28 +235,29 @@ with tab2:
                         if is_saved:
                             st.info("✅ 도감에 보관 중")
                         else:
-                            if st.button(f"➕ 저장하기", key=f"btn_{file.name}"):
+                            # '저장하기' -> '등록하기' 변경
+                            if st.button(f"➕ 등록하기", key=f"btn_{file.name}"):
                                 res = save_data(bird_name)
                                 if res is True:
-                                    st.toast(f"🎉 {bird_name} 저장 완료!")
+                                    st.toast(f"✅ {bird_name} 등록 완료!") # 알림 메시지 통일
                                     st.rerun()
                                 else:
                                     st.error(f"실패: {res}")
                         
-                        # --- 💬 AI와 토론하기 (수정됨: rerun 삭제) ---
-                        with st.expander("🤔 다른 새 같은가요? (재분석 요청)"):
+                        # --- 💬 AI와 토론하기 ---
+                        with st.expander("🤔 다른 새 같은가요?"): # (재분석 요청) 글자 삭제
                             def retry_analysis(f_name, img_file):
                                 user_input = st.session_state[f"doubt_{f_name}"]
                                 if user_input:
-                                    # 여기서 스피너는 콜백 안이라서 화면에 안 보일 수 있으니 생략하거나 toast 사용
                                     st.toast("AI가 의견을 듣고 다시 생각 중입니다... 🤔")
                                     img = Image.open(img_file)
                                     new_res = analyze_bird_image(img, user_doubt=user_input)
                                     st.session_state.ai_results[f_name] = new_res
-                                    # ⭐️ st.rerun() 삭제함! (자동 리런됨)
+                                    # 자동 리런됨
 
                             st.text_input("어떤 새라고 생각하시나요?", key=f"doubt_{file.name}")
-                            st.button("AI에게 다시 물어보기", key=f"ask_{file.name}", 
+                            # 버튼 이름 변경
+                            st.button("재분석 요청", key=f"ask_{file.name}", 
                                       on_click=retry_analysis, args=(file.name, file))
 
 # --- [6. 하단: 전체 기록 보기] ---
