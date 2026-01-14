@@ -5,11 +5,11 @@ import google.generativeai as genai
 from PIL import Image
 import concurrent.futures 
 from datetime import datetime
+import math
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 앱 스타일 적용
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -20,7 +20,6 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# 비밀번호(Secrets) 체크
 try:
     SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
     API_KEY = st.secrets["GOOGLE_API_KEY"]
@@ -35,17 +34,30 @@ def get_data():
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         if df.empty:
-            return pd.DataFrame(columns=['date', 'bird_name'])
+            # 엑셀에 아무것도 없으면 기본 틀 생성 (No, bird_name, date)
+            return pd.DataFrame(columns=['No', 'bird_name', 'date'])
         return df
     except:
-        return pd.DataFrame(columns=['date', 'bird_name'])
+        return pd.DataFrame(columns=['No', 'bird_name', 'date'])
 
 def save_data(bird_name):
     try:
         df = get_data()
+        
+        # 1. 'No' 컬럼에서 가장 큰 숫자 찾기
+        next_no = 1
+        if 'No' in df.columns and not df.empty:
+            # 숫자가 아닌 값이 있어도 에러 안 나게 처리
+            max_val = pd.to_numeric(df['No'], errors='coerce').max()
+            if not pd.isna(max_val):
+                next_no = int(max_val) + 1
+            
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        new_row = pd.DataFrame({'date': [now], 'bird_name': [bird_name]})
+        
+        # 2. 'No' 컬럼에 번호 넣어서 저장
+        new_row = pd.DataFrame({'No': [next_no], 'bird_name': [bird_name], 'date': [now]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
+        
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
     except Exception as e:
@@ -67,24 +79,17 @@ st.title("🦅 탐조 도감")
 
 # 데이터 불러오기
 df = get_data()
-if 'bird_name' in df.columns:
-    my_birds = df['bird_name'].tolist()
-    # ⭐️ 수정됨: 여기서 순서를 뒤집지 않습니다! (엑셀 순서 그대로 유지)
-else:
-    my_birds = []
-
-count = len(my_birds)
+count = len(df)
 
 # 통계 박스
 st.markdown(f"""
     <div style="padding: 15px; border-radius: 12px; background-color: #e8f5e9; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 도감 기록</span><br>
+        <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 총 발견한 새</span><br>
         <span style="font-size: 2.2rem; font-weight: 800; color: #1b5e20; line-height: 1.2;">{count}</span>
         <span style="font-size: 1.2rem; font-weight: 600; color: #333;"> 마리</span>
     </div>
 """, unsafe_allow_html=True)
 
-# 탭 설정
 tab1, tab2 = st.tabs(["✍️ 직접 입력", "📸 AI 분석"])
 
 # ------------------------------------------------
@@ -100,6 +105,7 @@ with tab1:
             if res is True:
                 st.toast(f"✅ {name} 저장 완료!")
                 st.session_state.input_bird = ""
+                st.rerun() # 저장 후 바로 목록 갱신
             else:
                 st.error(f"저장 실패: {res}")
 
@@ -137,12 +143,27 @@ with tab2:
                             else:
                                 st.error(f"저장 실패: {res}")
 
-# --- [5. 하단: 저장된 목록 (수정됨)] ---
+# --- [5. 하단: 전체 기록 보기] ---
 st.divider()
 with st.expander("📜 전체 기록 보기 (등록순)", expanded=True):
-    if my_birds:
-        # ⭐️ 수정됨: 엑셀 순서대로 1번부터 차례대로 출력
-        for i, bird in enumerate(my_birds, 1):
-            st.markdown(f"**{i}. {bird}**")
+    if not df.empty and 'bird_name' in df.columns:
+        # ⭐️ 엑셀의 'No' 컬럼을 찾아서 그대로 보여줍니다.
+        
+        # 목록 출력 (위에서 아래로 순서대로)
+        for index, row in df.iterrows():
+            bird = row['bird_name']
+            
+            # 'No' 컬럼 값 가져오기
+            if 'No' in df.columns and pd.notna(row['No']):
+                try:
+                    # 1.0 처럼 소수점으로 나오는 걸 방지하기 위해 int로 변환
+                    num = int(row['No'])
+                except:
+                    num = row['No'] # 숫자가 아니면 그대로 출력
+            else:
+                num = index + 1 # No가 없으면 그냥 순서대로
+                
+            st.markdown(f"**{num}. {bird}**")
+            
     else:
         st.caption("아직 기록된 새가 없습니다.")
