@@ -10,7 +10,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 모바일 강제 가로 정렬 및 디자인 수정
+# CSS: 모바일 레이아웃 강제 교정 (미디어 쿼리 적용)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -18,32 +18,35 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 수직 중앙 정렬 */
+            /* 기본적으로 모든 수평 블록 수직 중앙 정렬 */
             div[data-testid="stHorizontalBlock"] {
                 align-items: center;
             }
             
-            /* ⭐️ [핵심] Expander(기록보기) 안에서는 모바일이라도 무조건 가로로 배치! */
-            div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
+            /* 📱 모바일 화면(폭 600px 이하) 전용 스타일 */
+            @media (max-width: 600px) {
+                /* Expander 내부의 컬럼들이 줄바꿈(세로배치) 되지 않도록 강제 */
+                div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
+                    flex-direction: row !important; /* 무조건 가로로! */
+                    flex-wrap: nowrap !important;   /* 줄바꿈 금지! */
+                }
+                
+                /* 컬럼 간격 및 여백 최소화 */
+                div[data-testid="column"] {
+                    padding: 0 2px !important;
+                    min-width: 0px !important; /* 최소 너비 제한 해제 */
+                }
             }
-            
-            /* 삭제 버튼 디자인: 작고 깔끔하게 */
+
+            /* 삭제 버튼 스타일: 작고 깔끔하게 */
             button[kind="secondary"] {
-                border-color: #ffcccc;
+                border: 1px solid #ffcccc;
                 color: #ff4b4b;
                 padding: 0px 8px; 
-                font-size: 0.75rem;
-                height: 30px;
+                font-size: 0.8rem;
+                height: 34px; /* 높이 고정 */
                 line-height: 1;
-                min-height: 0px; /* 버튼 높이 최소값 해제 */
-            }
-            
-            /* 모바일에서 열 간격 좁히기 (버튼 옆에 딱 붙게) */
-            div[data-testid="column"] {
-                padding: 0 5px !important;
-                min-width: 0 !important;
+                width: 100%; /* 컬럼 너비에 맞게 */
             }
             </style>
             """
@@ -284,20 +287,27 @@ with st.expander("📜 전체 기록 보기", expanded=True):
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            # ⭐️ 비율을 8:2로 주고, CSS로 강제 가로 배열시킴
-            col_txt, col_btn = st.columns([0.8, 0.2])
+            # ⭐️ 모바일 레이아웃 최적화: 7:3 비율 + CSS 강제 가로 정렬
+            # 7:3이면 이름이 길어도 버튼 공간을 침범하지 않고, 버튼도 잘리지 않습니다.
+            col_txt, col_btn = st.columns([0.7, 0.3])
             
             with col_txt:
-                st.markdown(f"<div style='font-weight: 500; font-size: 1rem; margin-top: 5px;'>{display_no}. {bird}</div>", unsafe_allow_html=True)
+                # 텍스트가 너무 길면 말줄임표(...) 처리 (CSS 없이 간단히 스타일 적용)
+                st.markdown(f"""
+                <div style='font-weight: 500; font-size: 1rem; 
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>
+                    {display_no}. {bird}
+                </div>
+                """, unsafe_allow_html=True)
             
             with col_btn:
-                # 버튼 크기 자동 조절 해제하고 작게 유지
                 if st.button("삭제", key=f"del_{index}_{bird}"):
                     res = delete_data(bird)
                     if res is True:
                         st.toast(f"🗑️ {bird} 삭제됨")
                         st.rerun()
             
+            # 구분선
             st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
             
     else:
