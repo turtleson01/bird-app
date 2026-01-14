@@ -10,7 +10,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 모바일 레이아웃 강제 교정 (미디어 쿼리 적용)
+# CSS: 모바일 레이아웃 강제 교정 (Streamlit의 고집 꺾기)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -18,35 +18,39 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 기본적으로 모든 수평 블록 수직 중앙 정렬 */
+            /* 1. 컬럼들이 좁아져도 절대 줄바꿈 하지 않게 강제 설정 */
             div[data-testid="stHorizontalBlock"] {
-                align-items: center;
+                flex-wrap: nowrap !important;
+                align-items: center !important;
+                gap: 5px !important; /* 컬럼 사이 간격 최소화 */
             }
             
-            /* 📱 모바일 화면(폭 600px 이하) 전용 스타일 */
-            @media (max-width: 600px) {
-                /* Expander 내부의 컬럼들이 줄바꿈(세로배치) 되지 않도록 강제 */
-                div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
-                    flex-direction: row !important; /* 무조건 가로로! */
-                    flex-wrap: nowrap !important;   /* 줄바꿈 금지! */
-                }
-                
-                /* 컬럼 간격 및 여백 최소화 */
-                div[data-testid="column"] {
-                    padding: 0 2px !important;
-                    min-width: 0px !important; /* 최소 너비 제한 해제 */
-                }
+            /* 2. 모바일에서 컬럼이 제멋대로 커지거나 작아지는 것 방지 (가장 중요!!) */
+            div[data-testid="column"] {
+                min-width: 0px !important; /* 최소 너비 제한 해제 */
+                width: auto !important;
+                flex: 1 1 auto !important;
+                padding: 0px !important; /* 컬럼 내부 패딩 제거 */
             }
 
-            /* 삭제 버튼 스타일: 작고 깔끔하게 */
+            /* 3. 삭제 버튼 스타일: 작고 단단하게 */
             button[kind="secondary"] {
                 border: 1px solid #ffcccc;
+                background-color: transparent;
                 color: #ff4b4b;
-                padding: 0px 8px; 
-                font-size: 0.8rem;
-                height: 34px; /* 높이 고정 */
-                line-height: 1;
-                width: 100%; /* 컬럼 너비에 맞게 */
+                padding: 0px !important;
+                margin: 0px !important;
+                font-size: 0.8rem !important;
+                height: 32px !important;
+                line-height: 32px !important;
+                width: 100% !important; /* 할당된 칸을 꽉 채우되 넘치지 않게 */
+                border-radius: 8px;
+            }
+            
+            /* 버튼 호버 효과 */
+            button[kind="secondary"]:hover {
+                background-color: #fff0f0;
+                border-color: #ff4b4b;
             }
             </style>
             """
@@ -287,21 +291,24 @@ with st.expander("📜 전체 기록 보기", expanded=True):
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            # ⭐️ 모바일 레이아웃 최적화: 7:3 비율 + CSS 강제 가로 정렬
-            # 7:3이면 이름이 길어도 버튼 공간을 침범하지 않고, 버튼도 잘리지 않습니다.
-            col_txt, col_btn = st.columns([0.7, 0.3])
+            # ⭐️ 비율: 이름(75%) : 버튼(25%)
+            # CSS로 min-width:0을 강제했으므로 좁은 화면에서도 25% 공간에 버튼이 딱 들어갑니다.
+            col_txt, col_btn = st.columns([0.75, 0.25])
             
             with col_txt:
-                # 텍스트가 너무 길면 말줄임표(...) 처리 (CSS 없이 간단히 스타일 적용)
+                # 텍스트가 너무 길면 ... 처리 (CSS)
                 st.markdown(f"""
-                <div style='font-weight: 500; font-size: 1rem; 
-                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>
+                <div style='font-weight: 500; font-size: 0.95rem; 
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                            padding-left: 2px;'>
                     {display_no}. {bird}
                 </div>
                 """, unsafe_allow_html=True)
             
             with col_btn:
-                if st.button("삭제", key=f"del_{index}_{bird}"):
+                # use_container_width=True를 써서 할당된 25% 공간을 꽉 채우되, 
+                # CSS로 padding을 없앴으므로 비대해지지 않습니다.
+                if st.button("삭제", key=f"del_{index}_{bird}", use_container_width=True):
                     res = delete_data(bird)
                     if res is True:
                         st.toast(f"🗑️ {bird} 삭제됨")
