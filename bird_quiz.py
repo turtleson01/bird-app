@@ -52,76 +52,113 @@ def add_bird_to_sheet(user_name, bird_name):
 st.set_page_config(page_title="AI 조류 도감", layout="wide", page_icon="🐦")
 birds, bird_order_map, family_group = load_bird_data()
 
+st.title("📸 AI 조류 도감")
+
+# 1. 닉네임 입력 (사이드바)
 if 'user_name' not in st.session_state:
     st.session_state.user_name = ""
 
-if not st.session_state.user_name:
-    st.title("🐦 AI 조류 도감")
-    with st.form("login_form"):
-        input_name = st.text_input("닉네임 (예: 민석)")
-        if st.form_submit_button("시작하기"):
+with st.sidebar:
+    st.header("👤 사용자 설정")
+    # 모바일 입력 오류 방지를 위해 폼 사용
+    with st.form("login_sidebar"):
+        input_name = st.text_input("닉네임을 입력하세요", value=st.session_state.user_name)
+        if st.form_submit_button("로그인 / 변경"):
             st.session_state.user_name = input_name
             st.rerun()
+
+    if st.session_state.user_name:
+        st.success(f"✅ {st.session_state.user_name}님 환영합니다!")
+    else:
+        st.warning("👈 기록하려면 닉네임을 입력하세요!")
+
+# 닉네임 없으면 멈춤
+if not st.session_state.user_name:
+    st.info("왼쪽 사이드바(모바일은 상단 화살표 >)를 열어 닉네임을 입력해주세요.")
     st.stop()
 
-with st.sidebar:
-    st.success(f"{st.session_state.user_name}님 로그인 중")
-    if st.button("로그아웃"):
-        st.session_state.user_name = ""
-        st.rerun()
-
-st.title("📸 AI 조류 도감")
+# 2. 메인 통계
 my_birds = get_user_data(st.session_state.user_name)
 found_count = len(my_birds)
-st.info(f"현재 {found_count}종 발견!")
+total = len(birds)
+percent = round(found_count/total*100, 1) if total > 0 else 0
+
+st.markdown(f"""
+    <div style="padding: 20px; border-radius: 10px; background-color: #f0f2f6; margin-bottom: 20px;">
+        <span style="font-size: 1.2rem; color: #555;">{st.session_state.user_name}님의 관찰 기록</span><br>
+        <span style="font-size: 3rem; font-weight: 800; color: #007BFF; line-height: 1;">{found_count}</span>
+        <span style="font-size: 1.5rem; font-weight: 600; color: #333;"> 종</span>
+        <span style="font-size: 1.1rem; color: #666; margin-left: 10px;">({percent}%)</span>
+    </div>
+""", unsafe_allow_html=True)
 
 st.divider()
 
-# --- AI 사진 기능 ---
-uploaded_file = st.file_uploader("새 사진 업로드", type=["jpg", "png"])
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, width=300)
-    
-    if st.button("이 새 이름이 뭐야?"):
-        with st.spinner("AI 분석 중..."):
-            try:
-                genai.configure(api_key=API_KEY)
-                
-                # [중요] 모델 이름을 여기서 바꿀 수 있게 변수로 뺐습니다.
-                # 우선 가장 최신 모델로 시도
-                model = genai.GenerativeModel('gemini-1.5-flash') 
-                
-                prompt = "이 새의 한국어 국명만 정확히 알려줘. 설명 없이 이름만."
-                response = model.generate_content([prompt, image])
-                st.success(f"결과: {response.text}")
-                
-                # (등록 로직 생략 - 에러 확인이 우선)
-                
-            except Exception as e:
-                st.error(f"AI 에러: {e}")
+# --- [핵심 수정] AI 사진 동정 기능 ---
+st.subheader("🤖 AI에게 물어보기")
+with st.expander("📷 사진 업로드하여 검색하기", expanded=True):
+    uploaded_file = st.file_uploader("새 사진을 올려주세요", type=["jpg", "jpeg", "png"])
+
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption='업로드된 사진', width=300)
+        
+        if st.button("이 새 이름이 뭐야?"):
+            with st.spinner("AI가 도감을 뒤적이는 중..."):
+                try:
+                    genai.configure(api_key=API_KEY)
+                    
+                    # ✅ [여기 수정됨] 질문자님의 사용 가능한 모델로 변경!
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    
+                    prompt = "이 사진에 있는 새의 정확한 한국어 국명(Official Korean Name)만 딱 단어로 말해줘. 부가 설명 하지마. 만약 새가 아니라면 '새 아님'이라고 해."
+                    response = model.generate_content([prompt, image])
+                    ai_result = response.text.strip()
+                    
+                    st.info(f"AI의 답변: **{ai_result}**")
+                    
+                    # 도감 매칭 로직
+                    if ai_result in birds:
+                        if ai_result not in my_birds:
+                            st.success(f"도감에 있는 새입니다! ({ai_result})")
+                            if st.button(f"'{ai_result}' 등록하기", key=f"btn_{ai_result}"):
+                                add_bird_to_sheet(st.session_state.user_name, ai_result)
+                                st.toast("등록 완료!")
+                                st.rerun()
+                        else:
+                            st.warning(f"이미 등록하신 새입니다. ({ai_result})")
+                    elif ai_result == "새 아님":
+                        st.error("사진에서 새를 찾을 수 없습니다.")
+                    else:
+                        st.warning(f"AI가 '{ai_result}'라고 했지만, 우리 도감 목록에는 없는 이름입니다.")
+                        
+                except Exception as e:
+                    st.error(f"AI 오류: {e}")
 
 st.divider()
 
-# ==========================================
-# 🛠️ [긴급 진단] 문제 해결용 버튼 (여기를 봐주세요!)
-# ==========================================
-with st.expander("🛠️ 시스템 진단 (에러가 계속 나면 눌러보세요)", expanded=True):
-    if st.button("내 API로 쓸 수 있는 모델 목록 확인하기"):
-        try:
-            genai.configure(api_key=API_KEY)
-            st.write(f"설치된 AI 도구 버전: {genai.__version__}")
-            st.write("---")
-            st.write("📋 사용 가능한 모델 목록:")
-            
-            available_models = []
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    st.write(f"- `{m.name}`")
-                    available_models.append(m.name)
-            
-            if not available_models:
-                st.error("사용 가능한 모델이 하나도 없습니다! API Key 권한 문제일 수 있습니다.")
-                
-        except Exception as e:
-            st.error(f"목록 불러오기 실패: {e}")
+# 3. 수동 입력
+st.subheader("✍️ 직접 입력하기")
+def handle_input():
+    val = st.session_state.bird_input.strip()
+    if val in birds:
+        if val not in my_birds:
+            add_bird_to_sheet(st.session_state.user_name, val)
+            st.toast(f"✅ {val} 저장 완료!")
+            st.rerun()
+        else:
+            st.warning("이미 등록된 새입니다.")
+    elif val:
+        st.error("목록에 없는 새 이름입니다.")
+    st.session_state.bird_input = ""
+
+st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handle_input)
+
+# 4. 리스트 보기
+with st.expander(f"📜 상세 기록 보기 ({found_count}종)"):
+    if my_birds:
+        sorted_found = sorted(my_birds, key=lambda x: bird_order_map.get(x, 999))
+        for b in sorted_found:
+            st.write(f"- {b}")
+    else:
+        st.write("아직 기록이 없습니다.")
