@@ -10,7 +10,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 이름과 삭제 버튼 사이의 적절한 간격 확보
+# CSS: 목록 디자인을 아주 심플하게 정리
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -18,52 +18,13 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 수직 중앙 정렬 및 가로 배열 */
-            div[data-testid="stHorizontalBlock"] {
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                align-items: center !important;
-            }
-            
-            /* 컬럼 설정: 이름 컬럼에 최소 너비를 주어 버튼을 밀어냄 */
-            div[data-testid="column"] {
-                min-width: 0 !important;
-                flex: 1 1 auto !important;
-            }
-
-            /* 삭제 버튼 스타일: 이름에서 적당히 떨어지도록 마진 설정 */
-            button[kind="secondary"] {
-                border: 1px solid #ffcccc;
-                background-color: transparent;
-                color: #ff4b4b;
-                
-                width: fit-content !important; 
-                height: 32px !important;
-                padding: 0 12px !important;
-                margin-left: 20px !important; /* 이름과 최소 20px은 떨어지게 설정 */
-                
-                font-size: 0.8rem !important;
-                border-radius: 8px;
-                white-space: nowrap !important;
-            }
-            
-            button[kind="secondary"]:hover {
-                background-color: #fff0f0;
-                border-color: #ff4b4b;
-            }
-            
-            /* 목록 텍스트 스타일: 이름이 길어지면 잘리도록 설정 */
-            .bird-name-text {
+            /* 목록 텍스트 스타일 */
+            .bird-item {
+                font-size: 1.05rem;
+                padding: 5px 0;
                 font-weight: 500;
-                font-size: 1rem;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                max-width: 100%;
             }
-            
-            hr { margin: 0.4rem 0 !important; }
+            hr { margin: 0.3rem 0 !important; }
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -75,7 +36,7 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 데이터 로드 및 족보 관리] ---
+# --- [2. 데이터 및 족보 관리] ---
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -108,7 +69,7 @@ def save_data(bird_name):
     try:
         bird_name = bird_name.strip()
         df = get_data()
-        if 'bird_name' in df.columns and bird_name in df['bird_name'].values: return "이미 등록된 새입니다."
+        if bird_name in df['bird_name'].values: return "이미 등록된 새입니다."
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         real_no = BIRD_MAP.get(bird_name, 9999)
         new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'date': [now]})
@@ -117,10 +78,11 @@ def save_data(bird_name):
         return True
     except Exception as e: return str(e)
 
-def delete_data(bird_name):
+# 다중 삭제 기능 추가
+def delete_birds(bird_names_to_delete):
     try:
         df = get_data()
-        df = df[df['bird_name'] != bird_name]
+        df = df[~df['bird_name'].isin(bird_names_to_delete)]
         conn.update(spreadsheet=SHEET_URL, data=df)
         return True
     except Exception as e: return str(e)
@@ -145,6 +107,21 @@ st.markdown(f"""
         <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 총 발견한 새: {len(df)} 마리</span>
     </div>
 """, unsafe_allow_html=True)
+
+# 삭제/수정 버튼 (목록 상단에 배치)
+with st.expander("🛠️ 기록 관리 (삭제하기)"):
+    if not df.empty:
+        # 검색 기능이 포함된 멀티 셀렉트
+        to_delete = st.multiselect("삭제할 새를 검색해서 선택하세요", df['bird_name'].tolist())
+        if st.button("선택한 새 삭제 실행", type="primary"):
+            if to_delete:
+                if delete_birds(to_delete) is True:
+                    st.success(f"{len(to_delete)}마리의 기록을 삭제했습니다.")
+                    st.rerun()
+            else:
+                st.warning("삭제할 대상을 선택해주세요.")
+    else:
+        st.write("삭제할 기록이 없습니다.")
 
 tab1, tab2 = st.tabs(["✍️ 직접 입력", "📸 AI 분석"])
 
@@ -184,23 +161,16 @@ with tab2:
                 if c2.button("➕ 등록하기", key=f"reg_{file.name}"):
                     if save_data(bird_name.strip()) is True: st.toast(f"✅ {bird_name.strip()} 등록 완료!"); st.rerun()
 
-# --- [5. 하단: 전체 기록 보기] ---
+# --- [5. 하단: 전체 기록 보기 (매우 심플)] ---
 st.divider()
-with st.expander("📜 전체 기록 보기", expanded=True):
-    if not df.empty:
-        for index, row in df.iterrows():
-            bird = row['bird_name']
-            real_no = BIRD_MAP.get(bird, 9999)
-            display_no = "??" if real_no == 9999 else real_no
-            
-            # ⭐️ 이름과 버튼 사이의 간격을 위해 비율 조정 (8:2)
-            # 버튼은 자기 구역 안에서 여백(margin-left)을 가짐
-            c1, c2 = st.columns([0.8, 0.2])
-            with c1:
-                st.markdown(f"<div class='bird-name-text'>{display_no}. {bird}</div>", unsafe_allow_html=True)
-            with c2:
-                if st.button("삭제", key=f"del_{index}_{bird}"):
-                    if delete_data(bird) is True: st.toast(f"🗑️ {bird} 삭제됨"); st.rerun()
-            st.markdown("<hr>", unsafe_allow_html=True)
-    else:
-        st.caption("기록이 없습니다.")
+st.subheader("📜 전체 기록 보기")
+if not df.empty:
+    for index, row in df.iterrows():
+        bird = row['bird_name']
+        real_no = BIRD_MAP.get(bird, 9999)
+        display_no = "??" if real_no == 9999 else real_no
+        
+        st.markdown(f"<div class='bird-item'>{display_no}. {bird}</div>", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
+else:
+    st.caption("기록이 없습니다.")
