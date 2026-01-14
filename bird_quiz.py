@@ -7,9 +7,9 @@ import concurrent.futures
 from datetime import datetime
 
 # --- [1. 기본 설정] ---
-st.set_page_config(page_title="AI 탐조 도감 (Cloud)", layout="wide", page_icon="🦅")
+st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# 진짜 앱처럼 보이게 하는 CSS
+# CSS: 앱 스타일 적용
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -20,7 +20,7 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# 비밀번호 확인
+# 비밀번호(Secrets) 체크
 try:
     SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
     API_KEY = st.secrets["GOOGLE_API_KEY"]
@@ -33,7 +33,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
     try:
-        df = conn.read(spreadsheet=SHEET_URL, ttl=0) # ttl=0: 항상 최신 데이터 불러오기
+        df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         if df.empty:
             return pd.DataFrame(columns=['date', 'bird_name'])
         return df
@@ -44,18 +44,14 @@ def save_data(bird_name):
     try:
         df = get_data()
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        # 새로운 데이터 추가
         new_row = pd.DataFrame({'date': [now], 'bird_name': [bird_name]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
-        
-        # 시트에 저장
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
     except Exception as e:
         return str(e)
 
-# --- [3. AI 분석 함수 (2.5 Flash)] ---
+# --- [3. AI 분석 함수] ---
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
@@ -67,9 +63,10 @@ def analyze_bird_image(image):
         return "Error"
 
 # --- [4. 메인 화면] ---
-st.title("🦅 나만의 탐조 도감")
+# ⭐️ 제목 변경됨
+st.title("🦅 탐조 도감")
 
-# 데이터 불러오기
+# 데이터 불러오기 및 정렬
 df = get_data()
 if 'bird_name' in df.columns:
     my_birds = df['bird_name'].tolist()
@@ -88,11 +85,11 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ⭐️ [수정됨] 탭 순서 변경: 직접 입력이 1번!
+# 탭 설정 (직접 입력이 1번)
 tab1, tab2 = st.tabs(["✍️ 직접 입력", "📸 AI 분석"])
 
 # ------------------------------------------------
-# 탭 1: 직접 입력 (이제 여기가 메인!)
+# 탭 1: 직접 입력
 # ------------------------------------------------
 with tab1:
     st.write("##### 📝 발견한 새 이름을 기록하세요")
@@ -103,12 +100,11 @@ with tab1:
             res = save_data(name)
             if res is True:
                 st.toast(f"✅ {name} 저장 완료!")
-                st.session_state.input_bird = "" # 입력창 비우기
+                st.session_state.input_bird = ""
             else:
                 st.error(f"저장 실패: {res}")
 
-    # 엔터 치면 바로 저장
-    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 직박구리, 참새")
+    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 직박구리")
 
 # ------------------------------------------------
 # 탭 2: AI 사진 분석
@@ -142,11 +138,12 @@ with tab2:
                             else:
                                 st.error(f"저장 실패: {res}")
 
-# --- [5. 하단: 저장된 목록] ---
+# --- [5. 하단: 저장된 목록 (수정됨)] ---
 st.divider()
 with st.expander("📜 전체 기록 보기 (최신순)", expanded=True):
     if my_birds:
-        for bird in my_birds:
-            st.markdown(f"- 🐦 **{bird}**")
+        # ⭐️ 수정됨: 아이콘 빼고 번호 추가 (1. 직박구리 2. 참새 ...)
+        for i, bird in enumerate(my_birds, 1):
+            st.markdown(f"**{i}. {bird}**")
     else:
         st.caption("아직 기록된 새가 없습니다.")
