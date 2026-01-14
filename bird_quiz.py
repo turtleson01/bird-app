@@ -8,9 +8,9 @@ from datetime import datetime
 import os
 
 # --- [1. 기본 설정] ---
-st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
+st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: UI 깔끔하게 정리
+# CSS: UI 디자인 최적화
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -18,6 +18,25 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
+            /* 요약 정보 박스 스타일 */
+            .summary-box {
+                padding: 20px; 
+                border-radius: 12px; 
+                background-color: #f0f7f4; 
+                border-left: 5px solid #2e7d32;
+                margin-bottom: 25px;
+            }
+            .summary-text {
+                font-size: 1.2rem; 
+                color: #2e7d32; 
+                font-weight: bold;
+            }
+            .summary-count {
+                font-size: 1.8rem; 
+                font-weight: 800; 
+                color: #1b5e20;
+            }
+
             /* 목록 아이템 스타일 */
             .bird-item {
                 font-size: 1.05rem;
@@ -25,11 +44,6 @@ hide_streamlit_style = """
                 font-weight: 500;
             }
             hr { margin: 0.4rem 0 !important; }
-            
-            /* 탭 폰트 크기 조정 */
-            button[data-baseweb="tab"] {
-                font-size: 1rem !important;
-            }
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -103,14 +117,16 @@ def analyze_bird_image(image, user_doubt=None):
     except: return "Error | 분석 오류"
 
 # --- [4. 메인 화면 구성] ---
-st.title("🦅 탐조 도감")
+st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# 상단 요약 정보
+# ⭐️ 수정된 상단 요약 정보 (문구 변경 및 글자 크기 확대)
 st.markdown(f"""
-    <div style="padding: 15px; border-radius: 12px; background-color: #e8f5e9; margin-bottom: 20px;">
-        <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 총 발견한 새: {len(df)} 마리</span>
+    <div class="summary-box">
+        <span class="summary-text">🌱 총 발견한 종 : </span>
+        <span class="summary-count">{len(df)}</span>
+        <span class="summary-text"> 종</span>
     </div>
 """, unsafe_allow_html=True)
 
@@ -167,19 +183,19 @@ with tab3:
     st.subheader("데이터 관리")
     if not df.empty:
         st.write("지우고 싶은 새를 검색하거나 선택하세요.")
-        to_delete = st.multiselect("삭제 대상 선택", options=df['bird_name'].tolist(), help="이름을 입력하면 검색됩니다.")
+        to_delete = st.multiselect("삭제 대상 선택", options=df['bird_name'].tolist())
         
         if st.button("선택한 항목 삭제", type="primary"):
             if to_delete:
                 if delete_birds(to_delete) is True:
-                    st.success(f"성공적으로 {len(to_delete)}개의 데이터를 지웠습니다.")
+                    st.success(f"{len(to_delete)}개의 데이터를 지웠습니다.")
                     st.rerun()
             else:
                 st.warning("삭제할 항목을 먼저 선택해주세요.")
     else:
         st.info("아직 등록된 기록이 없습니다.")
 
-# --- [5. 하단: 고정 목록 표시] ---
+# --- [5. 하단: 나의 탐조 목록] ---
 st.divider()
 st.subheader("📜 나의 탐조 목록")
 if not df.empty:
@@ -190,4 +206,4 @@ if not df.empty:
         st.markdown(f"<div class='bird-item'>{display_no}. {bird}</div>", unsafe_allow_html=True)
         st.markdown("<hr>", unsafe_allow_html=True)
 else:
-    st.caption("아직 기록이 없습니다. 위 탭을 이용해 새를 추가해보세요!")
+    st.caption("기록이 없습니다. 위 탭을 이용해 새를 추가해보세요!")
