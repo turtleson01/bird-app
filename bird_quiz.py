@@ -27,35 +27,35 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 원본 데이터(data.csv) 로드] ---
-# 옛날 코드의 핵심 기능을 가져왔습니다. '족보'를 읽는 역할입니다.
+# --- [2. 족보(data.csv) 로드 함수] ---
 @st.cache_data
-def load_reference_data():
+def load_bird_map():
     file_path = "data.csv"
+    # 파일이 없으면 빈 딕셔너리 반환
     if not os.path.exists(file_path):
         return {}
     
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # CSV 읽기 (옛날 코드 로직 그대로)
             df = pd.read_csv(file_path, skiprows=2, encoding=enc)
-            bird_data = df.iloc[:, [4]].dropna() # 이름 컬럼
+            # 4번째 컬럼이 이름이라고 가정 (옛날 코드 기준)
+            # 만약 에러나면 컬럼 인덱스 조절 필요
+            bird_data = df.iloc[:, [4]].dropna() 
             bird_data.columns = ['name']
             bird_data['name'] = bird_data['name'].str.strip()
             bird_list = bird_data['name'].tolist()
             
-            # { "참새": 1, "때까치": 256 ... } 형태로 맵핑 생성
-            # enumerate는 0부터 시작하므로 +1 해줍니다.
+            # { "참새": 1, "때까치": 256 ... } 맵핑 만들기
             return {name: i + 1 for i, name in enumerate(bird_list)}
-        except Exception: 
+        except:
             continue
     return {}
 
-# 족보(도감 번호표) 불러오기
-BIRD_MAP = load_reference_data()
+# 앱 시작할 때 족보 로딩
+BIRD_MAP = load_bird_map()
 
-# --- [3. 구글 시트 연결 및 저장] ---
+# --- [3. 구글 시트 데이터 로드 & 번호 자동 수정] ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
@@ -64,12 +64,16 @@ def get_data():
         if df.empty:
             return pd.DataFrame(columns=['No', 'bird_name', 'date'])
         
-        # 가져온 데이터를 'No' 번호 순서대로(오름차순) 정렬
-        if 'No' in df.columns:
-            df['No_Numeric'] = pd.to_numeric(df['No'], errors='coerce')
-            df = df.sort_values(by='No_Numeric', ascending=True)
+        # ⭐️ [핵심] 시트에 저장된 번호가 틀릴 수 있으니, 족보(BIRD_MAP)보고 다시 매깁니다.
+        if BIRD_MAP and 'bird_name' in df.columns:
+            # 족보에 있으면 그 번호, 없으면 9999번
+            df['real_no'] = df['bird_name'].apply(lambda x: BIRD_MAP.get(str(x).strip(), 9999))
             
-        return df
+            # 진짜 번호 순서대로 정렬 (1번부터 ...)
+            df = df.sort_values(by='real_no', ascending=True)
+            return df
+        else:
+            return df
     except:
         return pd.DataFrame(columns=['No', 'bird_name', 'date'])
 
@@ -78,26 +82,16 @@ def save_data(bird_name):
         bird_name = bird_name.strip()
         df = get_data()
         
-        # 이미 있는지 중복 체크
-        if bird_name in df['bird_name'].values:
+        # 중복 체크
+        if 'bird_name' in df.columns and bird_name in df['bird_name'].values:
             return "이미 등록된 새입니다."
-
-        # ⭐️ [핵심] 족보(data.csv)에서 진짜 번호 찾기
-        if bird_name in BIRD_MAP:
-            real_no = BIRD_MAP[bird_name] # 예: 때까치면 256
-        else:
-            # 족보에 없는 새(오타거나 희귀종)라면? 
-            # 일단 가장 뒷번호(9000번대)로 임시 부여하거나, 기존 방식대로 마지막 번호+1
-            # 여기서는 구분하기 쉽게 9000번부터 시작하게 했습니다.
-            real_no = 9000 
-            if 'No' in df.columns and not df.empty:
-                max_val = pd.to_numeric(df['No'], errors='coerce').max()
-                if max_val >= 9000:
-                    real_no = int(max_val) + 1
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        # 저장 (진짜 번호로 저장됨)
+        # 저장할 때는 'No' 컬럼에 일단 0으로 넣어도 됩니다. 
+        # (어차피 불러올 때 BIRD_MAP 보고 다시 계산하니까요)
+        real_no = BIRD_MAP.get(bird_name, 9999)
+        
         new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'date': [now]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
         
@@ -121,9 +115,9 @@ def analyze_bird_image(image):
 st.title("🦅 탐조 도감")
 
 if not BIRD_MAP:
-    st.warning("⚠️ 'data.csv' 파일을 찾지 못했습니다. 번호가 정확하지 않을 수 있습니다.")
+    st.error("⚠️ 'data.csv' 파일을 찾을 수 없습니다! 프로젝트 폴더에 파일을 넣어주세요.")
 
-# 데이터 불러오기
+# 데이터 불러오기 (여기서 번호 교정 & 정렬 완료됨)
 df = get_data()
 count = len(df)
 
@@ -150,13 +144,13 @@ with tab1:
             res = save_data(name)
             if res is True:
                 st.toast(f"✅ {name} 저장 완료!")
-                st.session_state.input_bird = "" 
+                st.session_state.input_bird = ""
             elif res == "이미 등록된 새입니다.":
-                st.warning(f"이미 도감에 있는 새입니다.")
+                st.warning("이미 도감에 있는 새입니다.")
             else:
                 st.error(f"저장 실패: {res}")
 
-    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 때까치")
+    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 참새")
 
 # ------------------------------------------------
 # 탭 2: AI 사진 분석
@@ -200,19 +194,20 @@ with tab2:
 st.divider()
 with st.expander("📜 전체 기록 보기 (도감 번호순)", expanded=True):
     if not df.empty and 'bird_name' in df.columns:
-        # 이미 get_data()에서 번호순으로 정렬되어 넘어옵니다.
+        
+        # BIRD_MAP을 이용해서 번호를 다시 표시
         for index, row in df.iterrows():
             bird = row['bird_name']
             
-            if 'No' in df.columns and pd.notna(row['No']):
-                try:
-                    num = int(row['No'])
-                except:
-                    num = row['No']
+            # 족보에서 진짜 번호 가져오기
+            real_no = BIRD_MAP.get(bird, 9999)
+            
+            if real_no == 9999:
+                display_no = "??" # 족보에 없는 새
             else:
-                num = "??"
+                display_no = real_no
                 
-            st.markdown(f"**{num}. {bird}**")
+            st.markdown(f"**{display_no}. {bird}**")
             
     else:
         st.caption("아직 기록된 새가 없습니다.")
