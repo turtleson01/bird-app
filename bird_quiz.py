@@ -72,13 +72,11 @@ def get_data():
 def save_data(bird_name):
     bird_name = bird_name.strip()
     
-    # ⭐️ 1단계: 족보(BIRD_MAP)에 있는 이름인지 확인
     if bird_name not in BIRD_MAP:
         return f"'{bird_name}'은(는) 도감 목록에 없는 이름입니다. 정확한 국명을 입력해주세요."
 
     try:
         df = get_data()
-        # ⭐️ 2단계: 이미 등록된 새인지 확인
         if bird_name in df['bird_name'].values: 
             return "이미 등록된 새입니다."
         
@@ -125,7 +123,7 @@ st.markdown(f"""
 
 tab1, tab2, tab3 = st.tabs(["✍️ 직접 입력", "📸 AI 분석", "🛠️ 기록 관리"])
 
-# --- 탭 1: 직접 입력 (검증 로직 강화) ---
+# --- 탭 1: 직접 입력 ---
 with tab1:
     st.subheader("새 이름 직접 기록")
     def add_manual():
@@ -136,7 +134,6 @@ with tab1:
                 st.toast(f"✅ {name} 등록 완료!")
                 st.session_state.input_bird = ""
             else:
-                # 족보에 없거나 중복일 경우 에러 메시지 출력
                 st.error(res)
     
     st.text_input("발견한 새 이름을 입력하세요 (엔터 시 등록)", 
@@ -145,7 +142,7 @@ with tab1:
                   placeholder="예: 참새, 맷도요 등")
     st.caption("※ data.csv 파일에 등록된 정확한 한국어 국명만 등록 가능합니다.")
 
-# --- 탭 2: AI 분석 ---
+# --- 탭 2: AI 분석 (에러 수정됨) ---
 with tab2:
     st.subheader("사진으로 이름 찾기")
     uploaded_files = st.file_uploader("새 사진을 업로드하세요", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
@@ -161,27 +158,50 @@ with tab2:
                     st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file))
             
             raw = st.session_state.ai_results[file.name]
-            bird_name, reason = raw.split("|") if "|" in raw else (raw, "분석 완료")
-            bird_name = bird_name.strip()
+            
+            # ⭐️⭐️ [수정] 여기가 에러 나던 부분입니다. 안전하게 고쳤습니다.
+            if "|" in raw:
+                # split("|", 1) 은 구분자가 여러 개여도 딱 첫 번째에서만 자릅니다.
+                parts = raw.split("|", 1)
+                bird_name = parts[0].strip()
+                reason = parts[1].strip()
+            else:
+                bird_name = raw.strip()
+                reason = "AI가 이유를 생성하지 못했습니다."
             
             with st.container(border=True):
+                # 상단 닫기 버튼
                 c_top1, c_top2 = st.columns([0.9, 0.1])
                 if c_top2.button("❌", key=f"cls_{file.name}"):
                     st.session_state.dismissed_files.add(file.name); st.rerun()
                 
-                c1, c2 = st.columns([1, 2])
-                c1.image(file, use_container_width=True)
-                c2.markdown(f"### {bird_name}")
-                c2.caption(reason.strip())
+                c1, c2 = st.columns([1, 1.5])
+                with c1:
+                    st.image(file, use_container_width=True)
                 
-                if c2.button("➕ 도감에 추가", key=f"reg_{file.name}"):
-                    # AI 분석 결과도 save_data를 통해 검증을 거칩니다.
-                    res = save_data(bird_name)
-                    if res is True: 
-                        st.toast(f"✅ {bird_name} 등록 완료!")
-                        st.rerun()
-                    else:
-                        st.error(res)
+                with c2:
+                    st.markdown(f"### 🏷️ 이름: **{bird_name}**")
+                    st.markdown(f"**🔍 판단 이유**")
+                    st.write(reason)
+                    
+                    # 🔵 파란색 버튼 (type="primary")
+                    if st.button(f"➕ 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
+                        res = save_data(bird_name)
+                        if res is True: 
+                            st.toast(f"✅ {bird_name} 등록 완료!")
+                            st.rerun()
+                        else:
+                            st.error(res)
+                    
+                    st.divider()
+                    # 재분석 기능
+                    st.write("🤔 **판단이 틀린 것 같나요?**")
+                    user_opinion = st.text_input("의견 입력 (예: 말똥가리 아니야?)", key=f"doubt_{file.name}")
+                    if st.button("AI에게 다시 확인 요청", key=f"ask_{file.name}"):
+                        if user_opinion:
+                            with st.spinner("재분석 중..."):
+                                st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
+                                st.rerun()
 
 # --- 탭 3: 기록 관리 (삭제) ---
 with tab3:
