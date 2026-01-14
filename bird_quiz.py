@@ -1,10 +1,13 @@
 import streamlit as st
+import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
 from PIL import Image
 import concurrent.futures 
+from datetime import datetime
 
-# --- [1. 설정 & 디자인] ---
-st.set_page_config(page_title="나만의 탐조 도감", layout="wide", page_icon="🦅")
+# --- [1. 기본 설정] ---
+st.set_page_config(page_title="AI 탐조 도감 (Cloud)", layout="wide", page_icon="🦅")
 
 # 진짜 앱처럼 보이게 하는 CSS
 hide_streamlit_style = """
@@ -17,17 +20,40 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# API 키 확인
+# 비밀번호 확인
 try:
+    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
     API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
-    st.error("설정(Secrets)에 GOOGLE_API_KEY가 없습니다.")
+    st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 임시 저장소 (세션)] ---
-# 구글 시트 대신, 앱이 켜져있는 동안만 기억하는 메모리입니다.
-if 'collected_birds' not in st.session_state:
-    st.session_state.collected_birds = []
+# --- [2. 구글 시트 연결] ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def get_data():
+    try:
+        df = conn.read(spreadsheet=SHEET_URL, ttl=0) # ttl=0: 항상 최신 데이터 불러오기
+        if df.empty:
+            return pd.DataFrame(columns=['date', 'bird_name'])
+        return df
+    except:
+        return pd.DataFrame(columns=['date', 'bird_name'])
+
+def save_data(bird_name):
+    try:
+        df = get_data()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        # 새로운 데이터 추가
+        new_row = pd.DataFrame({'date': [now], 'bird_name': [bird_name]})
+        updated_df = pd.concat([df, new_row], ignore_index=True)
+        
+        # 시트에 저장
+        conn.update(spreadsheet=SHEET_URL, data=updated_df)
+        return True
+    except Exception as e:
+        return str(e)
 
 # --- [3. AI 분석 함수 (2.5 Flash)] ---
 def analyze_bird_image(image):
@@ -43,80 +69,81 @@ def analyze_bird_image(image):
 # --- [4. 메인 화면] ---
 st.title("🦅 나만의 탐조 도감")
 
-# 📊 통계 박스 (디자인 복구)
-count = len(st.session_state.collected_birds)
+# 데이터 불러오기
+df = get_data()
+if 'bird_name' in df.columns:
+    my_birds = df['bird_name'].tolist()
+    # 최신순으로 정렬해서 보여주기 위해 뒤집기
+    my_birds.reverse() 
+else:
+    my_birds = []
+
+count = len(my_birds)
+
+# 통계 박스
 st.markdown(f"""
     <div style="padding: 15px; border-radius: 12px; background-color: #e8f5e9; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 현재 채집한 새</span><br>
+        <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 도감 기록</span><br>
         <span style="font-size: 2.2rem; font-weight: 800; color: #1b5e20; line-height: 1.2;">{count}</span>
         <span style="font-size: 1.2rem; font-weight: 600; color: #333;"> 마리</span>
     </div>
 """, unsafe_allow_html=True)
 
-# 탭으로 기능 분리 (깔끔하게)
-tab1, tab2 = st.tabs(["✍️ 직접 입력", "📸 AI 분석"])
+tab1, tab2 = st.tabs(["📸 AI 분석", "✍️ 직접 입력"])
 
 # ------------------------------------------------
-# 탭 1: 직접 입력 기능 (복구됨!)
+# 탭 1: AI 사진 분석
 # ------------------------------------------------
 with tab1:
-    st.write("##### 발견한 새 이름을 직접 기록하세요")
-    
-    def add_manual():
-        name = st.session_state.input_bird.strip()
-        if name:
-            if name not in st.session_state.collected_birds:
-                st.session_state.collected_birds.append(name)
-                st.toast(f"✅ {name} 추가 완료!")
-            else:
-                st.warning("이미 목록에 있는 새입니다.")
-        st.session_state.input_bird = "" # 입력창 비우기
-
-    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 참새, 까치")
-    st.caption("엔터를 치면 바로 추가됩니다.")
-
-# ------------------------------------------------
-# 탭 2: AI 사진 분석
-# ------------------------------------------------
-with tab2:
-    st.write("##### 사진을 올리면 AI가 이름을 찾아줍니다")
-    uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("새 사진을 올려주세요", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
     if uploaded_files:
         st.write(f"⚡️ **{len(uploaded_files)}장** 분석 중...")
-        
         images = [Image.open(file) for file in uploaded_files]
-        results = []
-
-        with st.spinner("AI가 눈을 부릅뜨고 찾는 중..."):
+        
+        with st.spinner("AI가 분석 중..."):
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 results = list(executor.map(analyze_bird_image, images))
 
         for file, result in zip(uploaded_files, results):
             with st.container(border=True):
                 c1, c2 = st.columns([1, 2])
-                with c1:
-                    st.image(file, use_container_width=True)
+                with c1: st.image(file, use_container_width=True)
                 with c2:
                     if result == "새 아님" or "Error" in result:
                         st.error("새를 못 찾았어요.")
                     else:
                         st.markdown(f"### 👉 **{result}**")
-                        
-                        # 도감 추가 버튼
-                        if result not in st.session_state.collected_birds:
-                            if st.button(f"➕ 도감에 넣기", key=f"btn_{file.name}"):
-                                st.session_state.collected_birds.append(result)
-                                st.toast(f"🎉 {result} 획득!")
+                        if st.button(f"➕ 저장하기", key=f"btn_{file.name}"):
+                            res = save_data(result)
+                            if res is True:
+                                st.toast(f"✅ {result} 도감에 영구 저장!")
                                 st.rerun()
-                        else:
-                            st.info("✅ 이미 도감에 있습니다.")
+                            else:
+                                st.error(f"저장 실패: {res}")
 
-# --- [5. 하단: 내 도감 리스트] ---
+# ------------------------------------------------
+# 탭 2: 직접 입력
+# ------------------------------------------------
+with tab2:
+    def add_manual():
+        name = st.session_state.input_bird.strip()
+        if name:
+            res = save_data(name)
+            if res is True:
+                st.toast(f"✅ {name} 저장 완료!")
+                st.session_state.input_bird = ""
+            else:
+                st.error(f"저장 실패: {res}")
+
+    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 직박구리")
+
+# --- [5. 하단: 저장된 목록] ---
 st.divider()
-with st.expander("📜 나의 도감 목록 보기", expanded=True):
-    if st.session_state.collected_birds:
-        # 예쁜 뱃지 스타일로 보여주기
-        st.markdown(" ".join([f"`{bird}`" for bird in st.session_state.collected_birds]), unsafe_allow_html=True)
+with st.expander("📜 전체 기록 보기 (최신순)", expanded=True):
+    if my_birds:
+        # 리스트 형태로 깔끔하게 출력
+        for bird in my_birds:
+            st.markdown(f"- 🐦 **{bird}**")
     else:
-        st.write("아직 발견한 새가 없습니다. 밖으로 나가보세요! 🔭")
+        st.caption("아직 기록된 새가 없습니다.")
