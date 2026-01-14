@@ -10,7 +10,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 목록 디자인을 아주 심플하게 정리
+# CSS: UI 깔끔하게 정리
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -18,13 +18,18 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 목록 텍스트 스타일 */
+            /* 목록 아이템 스타일 */
             .bird-item {
                 font-size: 1.05rem;
-                padding: 5px 0;
+                padding: 8px 0;
                 font-weight: 500;
             }
-            hr { margin: 0.3rem 0 !important; }
+            hr { margin: 0.4rem 0 !important; }
+            
+            /* 탭 폰트 크기 조정 */
+            button[data-baseweb="tab"] {
+                font-size: 1rem !important;
+            }
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -36,7 +41,7 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 데이터 및 족보 관리] ---
+# --- [2. 데이터 및 족보 관리 함수] ---
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -78,7 +83,6 @@ def save_data(bird_name):
         return True
     except Exception as e: return str(e)
 
-# 다중 삭제 기능 추가
 def delete_birds(bird_names_to_delete):
     try:
         df = get_data()
@@ -87,7 +91,7 @@ def delete_birds(bird_names_to_delete):
         return True
     except Exception as e: return str(e)
 
-# --- [3. AI 분석] ---
+# --- [3. AI 분석 함수] ---
 def analyze_bird_image(image, user_doubt=None):
     try:
         genai.configure(api_key=API_KEY)
@@ -98,44 +102,39 @@ def analyze_bird_image(image, user_doubt=None):
         return response.text.strip()
     except: return "Error | 분석 오류"
 
-# --- [4. 메인 화면] ---
+# --- [4. 메인 화면 구성] ---
 st.title("🦅 탐조 도감")
 
 df = get_data()
+
+# 상단 요약 정보
 st.markdown(f"""
     <div style="padding: 15px; border-radius: 12px; background-color: #e8f5e9; margin-bottom: 20px;">
         <span style="font-size: 1.0rem; color: #2e7d32; font-weight: bold;">🌱 총 발견한 새: {len(df)} 마리</span>
     </div>
 """, unsafe_allow_html=True)
 
-# 삭제/수정 버튼 (목록 상단에 배치)
-with st.expander("🛠️ 기록 관리 (삭제하기)"):
-    if not df.empty:
-        # 검색 기능이 포함된 멀티 셀렉트
-        to_delete = st.multiselect("삭제할 새를 검색해서 선택하세요", df['bird_name'].tolist())
-        if st.button("선택한 새 삭제 실행", type="primary"):
-            if to_delete:
-                if delete_birds(to_delete) is True:
-                    st.success(f"{len(to_delete)}마리의 기록을 삭제했습니다.")
-                    st.rerun()
-            else:
-                st.warning("삭제할 대상을 선택해주세요.")
-    else:
-        st.write("삭제할 기록이 없습니다.")
+# 탭 구성: 직접 입력 - AI 분석 - 기록 관리
+tab1, tab2, tab3 = st.tabs(["✍️ 직접 입력", "📸 AI 분석", "🛠️ 기록 관리"])
 
-tab1, tab2 = st.tabs(["✍️ 직접 입력", "📸 AI 분석"])
-
+# --- 탭 1: 직접 입력 ---
 with tab1:
+    st.subheader("새 이름 직접 기록")
     def add_manual():
         name = st.session_state.input_bird.strip()
         if name:
             res = save_data(name)
-            if res is True: st.toast(f"✅ {name} 등록 완료!"); st.session_state.input_bird = ""
+            if res is True: 
+                st.toast(f"✅ {name} 등록 완료!")
+                st.session_state.input_bird = ""
             else: st.error(res)
-    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual)
+    st.text_input("발견한 새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
 
+# --- 탭 2: AI 분석 ---
 with tab2:
-    uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    st.subheader("사진으로 이름 찾기")
+    uploaded_files = st.file_uploader("새 사진을 업로드하세요", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    
     if 'ai_results' not in st.session_state: st.session_state.ai_results = {}
     if 'dismissed_files' not in st.session_state: st.session_state.dismissed_files = set()
 
@@ -154,23 +153,4 @@ with tab2:
                 if c_top2.button("❌", key=f"cls_{file.name}"):
                     st.session_state.dismissed_files.add(file.name); st.rerun()
                 
-                c1, c2 = st.columns([1, 2])
-                c1.image(file, use_container_width=True)
-                c2.markdown(f"### {bird_name.strip()}")
-                c2.caption(reason.strip())
-                if c2.button("➕ 등록하기", key=f"reg_{file.name}"):
-                    if save_data(bird_name.strip()) is True: st.toast(f"✅ {bird_name.strip()} 등록 완료!"); st.rerun()
-
-# --- [5. 하단: 전체 기록 보기 (매우 심플)] ---
-st.divider()
-st.subheader("📜 전체 기록 보기")
-if not df.empty:
-    for index, row in df.iterrows():
-        bird = row['bird_name']
-        real_no = BIRD_MAP.get(bird, 9999)
-        display_no = "??" if real_no == 9999 else real_no
-        
-        st.markdown(f"<div class='bird-item'>{display_no}. {bird}</div>", unsafe_allow_html=True)
-        st.markdown("<hr>", unsafe_allow_html=True)
-else:
-    st.caption("기록이 없습니다.")
+                c1, c2 = st
