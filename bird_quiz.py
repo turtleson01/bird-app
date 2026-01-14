@@ -10,7 +10,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 여백 줄이기 및 버튼 디자인 조정
+# CSS: 모바일 최적화 및 버튼 디자인
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -18,24 +18,24 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 버튼과 텍스트 수직 중앙 정렬 */
+            /* 수직 중앙 정렬 (이름과 버튼 높이 맞추기) */
             div[data-testid="stHorizontalBlock"] {
                 align-items: center;
             }
             
-            /* 삭제 버튼 스타일: 빨간 테두리 + 빨간 글씨 */
+            /* 삭제 버튼 스타일: 작고 귀엽게 */
             button[kind="secondary"] {
                 border-color: #ffcccc;
                 color: #ff4b4b;
-                padding: 0.25rem 0.5rem; /* 버튼 내부 여백을 줄여서 더 작게 만듦 */
+                padding: 0px 10px; /* 내부 여백을 줄임 */
                 font-size: 0.8rem;
-                height: auto;
-                line-height: 1.2;
+                height: 32px; /* 높이 고정 */
+                line-height: 1;
             }
             
             /* 모바일에서 열 간격 좁히기 */
             div[data-testid="column"] {
-                padding: 0 !important;
+                padding: 0 2px !important;
             }
             </style>
             """
@@ -276,15 +276,14 @@ with st.expander("📜 전체 기록 보기", expanded=True):
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            # ⭐️ [수정] 모바일 화면에서도 한 줄에 나오도록 비율 조정 (0.75 vs 0.25)
-            # use_container_width=True 옵션을 제거해서 버튼 크기를 작게 만듦
-            col_txt, col_btn = st.columns([0.75, 0.25])
+            # ⭐️ [핵심 수정] 모바일에서 버튼이 떨어지지 않게 비율을 6.5 : 3.5 로 조정
+            col_txt, col_btn = st.columns([0.65, 0.35], gap="small")
             
             with col_txt:
-                st.markdown(f"<div style='font-weight: 500; font-size: 1rem;'>{display_no}. {bird}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-weight: 500; font-size: 1rem; margin-top: 5px;'>{display_no}. {bird}</div>", unsafe_allow_html=True)
             
             with col_btn:
-                # ⭐️ 거대해지는 옵션 삭제함
+                # use_container_width=True 제거 (버튼 작게 유지)
                 if st.button("삭제", key=f"del_{index}_{bird}"):
                     res = delete_data(bird)
                     if res is True:
