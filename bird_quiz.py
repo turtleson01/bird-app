@@ -3,7 +3,7 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
 from PIL import Image
-import concurrent.futures # ⭐️ 병렬 처리를 위한 도구
+import concurrent.futures # 병렬 처리를 위한 도구
 
 # --- [설정] ---
 try:
@@ -55,14 +55,14 @@ def add_bird_to_sheet(user_name, bird_name):
     except:
         return False
 
-# ⭐️ [핵심] AI 분석 함수 (이걸 여러 개 동시에 돌릴 예정)
+# ⭐️ AI 분석 함수 (Flash 모델로 변경하여 속도/안정성 확보)
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
         
-        # ⭐️ 속도와 정확도의 황금 밸런스: 'gemini-1.5-pro'
-        # 2.5-pro는 아직 실험적이라 느릴 수 있고, 1.5-pro가 현재 가장 안정적이고 빠름
-        model = genai.GenerativeModel('gemini-1.5-pro') 
+        # [변경] 1.5 Pro 대신 'gemini-1.5-flash' 사용
+        # 이유: 404 에러 방지 + 속도가 훨씬 빠름 + 조류 식별에 충분한 성능
+        model = genai.GenerativeModel('gemini-1.5-flash') 
         
         prompt = """
         당신은 한국의 야생 조류 전문가입니다.
@@ -139,7 +139,7 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 st.divider()
 
 # ==========================================
-# 2. [초고속 모드] 병렬 처리 + 심플 메시지
+# 2. [병렬 처리 모드] 멘트 수정 + 속도 개선
 # ==========================================
 st.subheader("🤖 AI에게 물어보기")
 
@@ -148,22 +148,17 @@ uploaded_files = st.file_uploader("사진을 여러 장 선택해도 됩니다",
 if uploaded_files:
     st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 분석합니다.")
     
-    # 이미지를 미리 다 열어둡니다.
     images = [Image.open(file) for file in uploaded_files]
     results = []
 
-    # ⭐️ 여기가 마법입니다: "분석하고 있다는 것만 출력" + "동시에 실행"
-    with st.spinner("AI가 사진들을 정밀 분석하고 있습니다..."):
-        # ThreadPoolExecutor를 사용해 여러 AI 요청을 한 번에 쏘아 보냅니다.
+    # ⭐️ [멘트 수정] 아주 심플하게!
+    with st.spinner("분석 중..."):
+        # 병렬 처리 (여러 장 동시 분석)
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            # images 리스트의 각 사진을 analyze_bird_image 함수에 넣어서 실행
-            future_to_image = {executor.submit(analyze_bird_image, img): img for img in images}
-            
-            # 결과가 나오는 대로 순서대로 저장
-            # (zip을 써서 파일명 순서와 결과 순서를 맞춤)
+            # 순서 보장을 위해 map 사용
             results = list(executor.map(analyze_bird_image, images))
 
-    # 분석 끝! 결과 촤라락 보여주기
+    # 결과 출력
     for i, (file, ai_result) in enumerate(zip(uploaded_files, results)):
         with st.container(border=True):
             col1, col2 = st.columns([1, 2])
@@ -172,11 +167,12 @@ if uploaded_files:
                 st.image(file, use_container_width=True)
             
             with col2:
-                # 결과 출력 (심플하게 결과만!)
+                # 결과 헤더
                 st.subheader(f"👉 {ai_result}")
                 
+                # 에러 처리
                 if "Error" in ai_result:
-                    st.error("분석 중 오류가 발생했습니다.")
+                    st.error(f"오류: {ai_result}")
                 elif ai_result == "새 아님":
                     st.error("새를 찾을 수 없습니다.")
                 else:
