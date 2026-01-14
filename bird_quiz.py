@@ -31,7 +31,6 @@ except:
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
-    # 파일이 없으면 빈 딕셔너리 반환
     if not os.path.exists(file_path):
         return {}
     
@@ -39,23 +38,18 @@ def load_bird_map():
     for enc in encodings:
         try:
             df = pd.read_csv(file_path, skiprows=2, encoding=enc)
-            # 4번째 컬럼이 이름이라고 가정 (옛날 코드 기준)
-            # 만약 에러나면 컬럼 인덱스 조절 필요
             bird_data = df.iloc[:, [4]].dropna() 
             bird_data.columns = ['name']
             bird_data['name'] = bird_data['name'].str.strip()
             bird_list = bird_data['name'].tolist()
-            
-            # { "참새": 1, "때까치": 256 ... } 맵핑 만들기
             return {name: i + 1 for i, name in enumerate(bird_list)}
         except:
             continue
     return {}
 
-# 앱 시작할 때 족보 로딩
 BIRD_MAP = load_bird_map()
 
-# --- [3. 구글 시트 데이터 로드 & 번호 자동 수정] ---
+# --- [3. 구글 시트 데이터 로드] ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
@@ -64,12 +58,9 @@ def get_data():
         if df.empty:
             return pd.DataFrame(columns=['No', 'bird_name', 'date'])
         
-        # ⭐️ [핵심] 시트에 저장된 번호가 틀릴 수 있으니, 족보(BIRD_MAP)보고 다시 매깁니다.
+        # 족보 보고 번호 교정 및 정렬
         if BIRD_MAP and 'bird_name' in df.columns:
-            # 족보에 있으면 그 번호, 없으면 9999번
             df['real_no'] = df['bird_name'].apply(lambda x: BIRD_MAP.get(str(x).strip(), 9999))
-            
-            # 진짜 번호 순서대로 정렬 (1번부터 ...)
             df = df.sort_values(by='real_no', ascending=True)
             return df
         else:
@@ -87,9 +78,6 @@ def save_data(bird_name):
             return "이미 등록된 새입니다."
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        # 저장할 때는 'No' 컬럼에 일단 0으로 넣어도 됩니다. 
-        # (어차피 불러올 때 BIRD_MAP 보고 다시 계산하니까요)
         real_no = BIRD_MAP.get(bird_name, 9999)
         
         new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'date': [now]})
@@ -117,7 +105,7 @@ st.title("🦅 탐조 도감")
 if not BIRD_MAP:
     st.error("⚠️ 'data.csv' 파일을 찾을 수 없습니다! 프로젝트 폴더에 파일을 넣어주세요.")
 
-# 데이터 불러오기 (여기서 번호 교정 & 정렬 완료됨)
+# 데이터 불러오기
 df = get_data()
 count = len(df)
 
@@ -153,21 +141,38 @@ with tab1:
     st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 참새")
 
 # ------------------------------------------------
-# 탭 2: AI 사진 분석
+# 탭 2: AI 사진 분석 (⭐️ 버그 수정된 부분)
 # ------------------------------------------------
 with tab2:
     st.write("##### 📸 사진으로 새 이름 찾기")
     uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
-    if uploaded_files:
-        st.write(f"⚡️ **{len(uploaded_files)}장** 분석 중...")
-        images = [Image.open(file) for file in uploaded_files]
-        
-        with st.spinner("AI가 분석 중..."):
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                results = list(executor.map(analyze_bird_image, images))
+    # ⭐️ AI 분석 결과를 기억할 저장소 생성
+    if 'ai_results' not in st.session_state:
+        st.session_state.ai_results = {}
 
-        for file, result in zip(uploaded_files, results):
+    if uploaded_files:
+        # 1. 새로 올라온 파일만 골라내기 (이미 분석한 건 패스)
+        new_files = [f for f in uploaded_files if f.name not in st.session_state.ai_results]
+        
+        # 2. 새로운 파일만 AI에게 분석 시키기
+        if new_files:
+            st.write(f"⚡️ **새로운 {len(new_files)}장** 분석 중...")
+            images = [Image.open(f) for f in new_files]
+            
+            with st.spinner("AI가 분석 중..."):
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    new_results = list(executor.map(analyze_bird_image, images))
+            
+            # 3. 결과를 기억 저장소에 저장
+            for f, res in zip(new_files, new_results):
+                st.session_state.ai_results[f.name] = res
+
+        # 4. 기억해둔 결과 보여주기
+        for file in uploaded_files:
+            # 기억장소에서 결과 꺼내오기
+            result = st.session_state.ai_results.get(file.name, "Error")
+            
             with st.container(border=True):
                 c1, c2 = st.columns([1, 2])
                 with c1: st.image(file, use_container_width=True)
@@ -175,35 +180,35 @@ with tab2:
                     if result == "새 아님" or "Error" in result:
                         st.error("새를 못 찾았어요.")
                     else:
-                        # 족보에서 번호 찾아서 미리 보여주기
                         bird_no = BIRD_MAP.get(result, "??")
                         st.markdown(f"### 👉 **{result}**")
                         st.caption(f"도감 번호: {bird_no}번")
                         
-                        if st.button(f"➕ 저장하기", key=f"btn_{file.name}"):
-                            res = save_data(result)
-                            if res is True:
-                                st.toast(f"✅ {result} 도감에 영구 저장!")
-                                st.rerun()
-                            elif res == "이미 등록된 새입니다.":
-                                st.warning("이미 저장된 새입니다.")
-                            else:
-                                st.error(f"저장 실패: {res}")
+                        # 이미 저장된 건지 미리 확인 (버튼 UX 개선)
+                        is_saved = result in df['bird_name'].values if 'bird_name' in df.columns else False
+                        
+                        if is_saved:
+                            st.success("✅ 이미 도감에 있습니다")
+                        else:
+                            # ⭐️ 버튼을 눌러도 이제 AI 분석을 다시 하지 않으므로 저장이 잘 됨!
+                            if st.button(f"➕ 저장하기", key=f"btn_{file.name}"):
+                                res = save_data(result)
+                                if res is True:
+                                    st.toast(f"🎉 {result} 저장 완료!")
+                                    st.rerun() # 목록 갱신을 위해 새로고침
+                                else:
+                                    st.error(f"저장 실패: {res}")
 
 # --- [6. 하단: 전체 기록 보기] ---
 st.divider()
 with st.expander("📜 전체 기록 보기 (도감 번호순)", expanded=True):
     if not df.empty and 'bird_name' in df.columns:
-        
-        # BIRD_MAP을 이용해서 번호를 다시 표시
         for index, row in df.iterrows():
             bird = row['bird_name']
-            
-            # 족보에서 진짜 번호 가져오기
             real_no = BIRD_MAP.get(bird, 9999)
             
             if real_no == 9999:
-                display_no = "??" # 족보에 없는 새
+                display_no = "??"
             else:
                 display_no = real_no
                 
