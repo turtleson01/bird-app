@@ -3,6 +3,7 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
 from PIL import Image
+import concurrent.futures # ⭐️ 병렬 처리를 위한 도구
 
 # --- [설정] ---
 try:
@@ -54,6 +55,26 @@ def add_bird_to_sheet(user_name, bird_name):
     except:
         return False
 
+# ⭐️ [핵심] AI 분석 함수 (이걸 여러 개 동시에 돌릴 예정)
+def analyze_bird_image(image):
+    try:
+        genai.configure(api_key=API_KEY)
+        
+        # ⭐️ 속도와 정확도의 황금 밸런스: 'gemini-1.5-pro'
+        # 2.5-pro는 아직 실험적이라 느릴 수 있고, 1.5-pro가 현재 가장 안정적이고 빠름
+        model = genai.GenerativeModel('gemini-1.5-pro') 
+        
+        prompt = """
+        당신은 한국의 야생 조류 전문가입니다.
+        사진 속의 새를 식별하여 '한국어 국명'을 단어 하나로 답하세요.
+        한국 도심/공원에서 흔한 새(직박구리, 참새, 까치 등)일 확률을 우선 고려하세요.
+        만약 새가 아니라면 '새 아님'이라고 하세요.
+        """
+        response = model.generate_content([prompt, image])
+        return response.text.strip()
+    except Exception as e:
+        return f"Error: {str(e)}"
+
 # --- 메인 화면 시작 ---
 st.set_page_config(page_title="AI 조류 도감", layout="wide", page_icon="🐦")
 birds, bird_order_map, family_group = load_bird_data()
@@ -82,7 +103,7 @@ if not st.session_state.user_name:
     st.info("👈 닉네임을 먼저 입력해주세요.")
     st.stop()
 
-st.title("📸 AI 조류 도감 (Premium Pro)")
+st.title("📸 AI 조류 도감")
 
 # 통계 계산
 db_birds = get_user_data(st.session_state.user_name)
@@ -118,66 +139,61 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 st.divider()
 
 # ==========================================
-# 2. [최고 성능 모드] Gemini 2.5 Pro 적용
+# 2. [초고속 모드] 병렬 처리 + 심플 메시지
 # ==========================================
 st.subheader("🤖 AI에게 물어보기")
 
 uploaded_files = st.file_uploader("사진을 여러 장 선택해도 됩니다", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
 if uploaded_files:
-    st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 **최신형 모델(2.5 Pro)**로 정밀 분석합니다.")
+    st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 분석합니다.")
     
-    for i, file in enumerate(uploaded_files):
-        # 유료니까 대기 시간(Sleep) 없음!
-        
+    # 이미지를 미리 다 열어둡니다.
+    images = [Image.open(file) for file in uploaded_files]
+    results = []
+
+    # ⭐️ 여기가 마법입니다: "분석하고 있다는 것만 출력" + "동시에 실행"
+    with st.spinner("AI가 사진들을 정밀 분석하고 있습니다..."):
+        # ThreadPoolExecutor를 사용해 여러 AI 요청을 한 번에 쏘아 보냅니다.
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # images 리스트의 각 사진을 analyze_bird_image 함수에 넣어서 실행
+            future_to_image = {executor.submit(analyze_bird_image, img): img for img in images}
+            
+            # 결과가 나오는 대로 순서대로 저장
+            # (zip을 써서 파일명 순서와 결과 순서를 맞춤)
+            results = list(executor.map(analyze_bird_image, images))
+
+    # 분석 끝! 결과 촤라락 보여주기
+    for i, (file, ai_result) in enumerate(zip(uploaded_files, results)):
         with st.container(border=True):
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                image = Image.open(file)
-                st.image(image, use_container_width=True)
+                st.image(file, use_container_width=True)
             
             with col2:
-                with st.spinner(f"정밀 판독 중..."):
-                    try:
-                        genai.configure(api_key=API_KEY)
-                        
-                        # ⭐️⭐️⭐️ [여기가 핵심] 최신형 2.5 Pro 모델 적용 ⭐️⭐️⭐️
-                        # 유료 1등급이라서 이제 이거 돌아갑니다!
-                        model = genai.GenerativeModel('gemini-2.5-pro') 
-                        
-                        prompt = """
-                        당신은 한국의 야생 조류 전문가입니다.
-                        사진 속의 새를 식별하여 '한국어 국명'을 단어 하나로 답하세요.
-                        한국 도심/공원에서 흔한 새(직박구리, 참새, 까치 등)일 확률을 우선 고려하세요.
-                        만약 새가 아니라면 '새 아님'이라고 하세요.
-                        """
-                        
-                        response = model.generate_content([prompt, image])
-                        ai_result = response.text.strip()
-                        
-                        st.subheader(f"👉 {ai_result}")
-                        
-                        if ai_result == "새 아님":
-                            st.error("새를 찾을 수 없습니다.")
+                # 결과 출력 (심플하게 결과만!)
+                st.subheader(f"👉 {ai_result}")
+                
+                if "Error" in ai_result:
+                    st.error("분석 중 오류가 발생했습니다.")
+                elif ai_result == "새 아님":
+                    st.error("새를 찾을 수 없습니다.")
+                else:
+                    if ai_result in birds:
+                        if ai_result in my_birds:
+                            st.info("👋 이미 도감에 등록된 친구입니다.")
                         else:
-                            if ai_result in birds:
-                                if ai_result in my_birds:
-                                    st.info("👋 이미 도감에 등록된 친구입니다.")
-                                else:
-                                    st.success("🎉 새로운 종 추가! (등록해주세요)")
-                                    
-                                    unique_key = f"btn_{i}_{file.name}"
-                                    if st.button(f"➕ '{ai_result}' 도감에 넣기", key=unique_key):
-                                        add_bird_to_sheet(st.session_state.user_name, ai_result)
-                                        st.session_state.local_updates.append(ai_result)
-                                        st.toast(f"{ai_result} 저장 완료!")
-                                        st.rerun()
-                            else:
-                                st.error(f"⚠️ '{ai_result}'은(는) 도감 목록에 없는 새입니다. (등록 불가)")
-                                    
-                    except Exception as e:
-                        st.error(f"오류: {e}")
+                            st.success("🎉 새로운 종 추가! (등록해주세요)")
+                            
+                            unique_key = f"btn_{i}_{file.name}"
+                            if st.button(f"➕ '{ai_result}' 도감에 넣기", key=unique_key):
+                                add_bird_to_sheet(st.session_state.user_name, ai_result)
+                                st.session_state.local_updates.append(ai_result)
+                                st.toast(f"{ai_result} 저장 완료!")
+                                st.rerun()
+                    else:
+                        st.error(f"⚠️ '{ai_result}'은(는) 도감 목록에 없는 새입니다. (등록 불가)")
 
 st.divider()
 
