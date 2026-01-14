@@ -27,56 +27,43 @@ def load_bird_data():
         
         bird_list = bird_data['name'].astype(str).str.strip().tolist()
         bird_order_map = {name: i for i, name in enumerate(bird_list)}
-        families = bird_data['family_kor'].astype(str).str.strip().unique()
-        family_group = {f: bird_data[bird_data['family_kor'] == f]['name'].str.strip().tolist() for f in families}
         
-        return bird_list, bird_order_map, family_group
+        return bird_list, bird_order_map
     except Exception as e:
-        return [], {}, {}
+        return [], {}
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def clean_name(val):
-    s = str(val).strip()
-    if s.endswith('.0'):
-        s = s[:-2]
-    return s
+# ⭐️ [변경] 닉네임 없이 무조건 '나의_도감'이라는 하나의 이름으로 저장합니다.
+DEFAULT_USER = "나의_도감"
 
-def get_user_data(user_name):
+def get_user_data():
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         if not df.empty and 'user_name' in df.columns:
-            df['clean_user'] = df['user_name'].apply(clean_name)
-            target_name = clean_name(user_name)
-            return df[df['clean_user'] == target_name]['bird_name'].tolist()
+            # 내 도감 데이터만 가져오기
+            return df[df['user_name'] == DEFAULT_USER]['bird_name'].tolist()
         return []
-    except Exception as e:
-        # 읽기 에러도 화면에 표시
+    except:
         return []
 
-# ⭐️ [수정됨] 에러를 숨기지 않고 반환하는 함수
-def add_bird_to_sheet(user_name, bird_name):
+def add_bird_to_sheet(bird_name):
     try:
-        # 1. 시트 읽기 시도
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         
-        # 2. 데이터프레임이 비어있으면 초기화 (헤더 생성)
         if df.empty or 'user_name' not in df.columns:
              df = pd.DataFrame(columns=['user_name', 'bird_name'])
         
-        # 3. 데이터 추가
-        safe_name = str(user_name)
-        new_row = pd.DataFrame({'user_name': [safe_name], 'bird_name': [bird_name]})
+        # 무조건 DEFAULT_USER로 저장
+        new_row = pd.DataFrame({'user_name': [DEFAULT_USER], 'bird_name': [bird_name]})
         updated_df = pd.concat([df, new_row], ignore_index=True)
         
-        # 4. 업데이트 시도
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
-        return "Success" # 성공하면 성공 메시지
-        
+        return True
     except Exception as e:
-        return str(e) # ⭐️ 실패하면 에러 메시지 원문(영어)을 그대로 반환
+        return str(e) # 에러 메시지 반환
 
-# AI 분석 함수
+# AI 분석 함수 (2.5 Flash)
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
@@ -94,45 +81,27 @@ def analyze_bird_image(image):
         return f"Error: {str(e)}"
 
 # --- 메인 화면 시작 ---
-st.set_page_config(page_title="AI 조류 도감", layout="wide", page_icon="🐦")
-birds, bird_order_map, family_group = load_bird_data()
+st.set_page_config(page_title="나만의 탐조 도감", layout="wide", page_icon="🦅")
+birds, bird_order_map = load_bird_data()
 
 # 임시 저장소
 if 'local_updates' not in st.session_state:
     st.session_state.local_updates = []
 
-# 로그인 화면
-if 'user_name' not in st.session_state:
-    st.session_state.user_name = ""
+# ⭐️ 로그인 화면 삭제됨! 바로 메인 화면 시작
 
-with st.sidebar:
-    st.header("👤 사용자 설정")
-    with st.form("login_sidebar"):
-        input_name = st.text_input("닉네임", value=st.session_state.user_name)
-        if st.form_submit_button("로그인"):
-            st.session_state.user_name = str(input_name).strip()
-            st.session_state.local_updates = [] 
-            st.rerun()
-    
-    if st.session_state.user_name:
-        st.success(f"✅ {st.session_state.user_name}님 기록 중")
-
-if not st.session_state.user_name:
-    st.info("👈 닉네임을 먼저 입력해주세요.")
-    st.stop()
-
-st.title("📸 AI 조류 도감")
+st.title("🦅 나만의 탐조 도감")
 
 # 통계 계산
-db_birds = get_user_data(st.session_state.user_name)
+db_birds = get_user_data()
 my_birds = list(set(db_birds + st.session_state.local_updates))
 found_count = len(my_birds)
 
 st.markdown(f"""
-    <div style="padding: 15px; border-radius: 10px; background-color: #f0f2f6; margin-bottom: 20px;">
-        <span style="font-size: 1.1rem; color: #555;">{st.session_state.user_name}님의 도감</span><br>
-        <span style="font-size: 2.0rem; font-weight: 800; color: #007BFF; line-height: 1;">{found_count}</span>
-        <span style="font-size: 1.2rem; font-weight: 600; color: #333;"> 종 발견</span>
+    <div style="padding: 15px; border-radius: 10px; background-color: #e8f5e9; margin-bottom: 20px;">
+        <span style="font-size: 1.1rem; color: #2e7d32;">현재까지 모은 새</span><br>
+        <span style="font-size: 2.2rem; font-weight: 800; color: #1b5e20; line-height: 1;">{found_count}</span>
+        <span style="font-size: 1.3rem; font-weight: 600; color: #333;"> 종</span>
     </div>
 """, unsafe_allow_html=True)
 
@@ -143,20 +112,17 @@ def handle_input():
     val = st.session_state.bird_input.strip()
     if val in birds:
         if val not in my_birds:
-            # 저장 시도
-            result = add_bird_to_sheet(st.session_state.user_name, val)
-            
-            if result == "Success":
+            res = add_bird_to_sheet(val)
+            if res is True:
                 st.session_state.local_updates.append(val)
-                st.toast(f"✅ {val} 저장 완료!")
+                st.toast(f"✅ {val} 도감 등록!")
                 st.rerun()
             else:
-                # ⭐️ 에러 발생 시 빨간 박스로 표시
-                st.error(f"❌ 저장 실패! (이 메시지를 알려주세요): {result}")
+                st.error(f"❌ 저장 실패 (키 설정을 확인하세요): {res}")
         else:
             st.warning(f"'{val}'는 이미 있어요.")
     elif val:
-        st.error(f"'{val}'... 목록에 없어요.")
+        st.error(f"'{val}'... 도감에 없는 이름입니다.")
     st.session_state.bird_input = ""
 
 st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handle_input)
@@ -164,17 +130,17 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 st.divider()
 
 # 2. AI 분석
-st.subheader("🤖 AI에게 물어보기")
+st.subheader("🤖 사진으로 찾기")
 
-uploaded_files = st.file_uploader("사진을 여러 장 선택해도 됩니다", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("사진을 올려주세요 (여러 장 가능)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
 if uploaded_files:
-    st.write(f"📂 총 **{len(uploaded_files)}장**의 사진을 분석합니다.")
+    st.write(f"📸 **{len(uploaded_files)}장** 분석 중...")
     
     images = [Image.open(file) for file in uploaded_files]
     results = []
 
-    with st.spinner("분석 중..."):
+    with st.spinner("AI가 새를 찾고 있습니다..."):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             results = list(executor.map(analyze_bird_image, images))
 
@@ -195,37 +161,23 @@ if uploaded_files:
                 else:
                     if ai_result in birds:
                         if ai_result in my_birds:
-                            st.info("👋 이미 도감에 등록된 친구입니다.")
+                            st.info("👋 이미 등록된 새입니다.")
                         else:
-                            st.success("🎉 새로운 종 추가! (등록해주세요)")
+                            st.success("🎉 새로운 종 발견!")
                             
                             unique_key = f"btn_{i}_{file.name}"
-                            if st.button(f"➕ '{ai_result}' 도감에 넣기", key=unique_key):
-                                # 저장 시도
-                                result = add_bird_to_sheet(st.session_state.user_name, ai_result)
-                                if result == "Success":
+                            if st.button(f"➕ '{ai_result}' 추가하기", key=unique_key):
+                                res = add_bird_to_sheet(ai_result)
+                                if res is True:
                                     st.session_state.local_updates.append(ai_result)
-                                    st.toast(f"{ai_result} 저장 완료!")
+                                    st.toast(f"✅ {ai_result} 저장 완료!")
                                     st.rerun()
                                 else:
-                                    st.error(f"❌ 저장 실패: {result}")
+                                    st.error(f"❌ 저장 실패: {res}")
                     else:
-                        st.error(f"⚠️ '{ai_result}'은(는) 도감 목록에 없는 새입니다. (등록 불가)")
+                        st.error(f"⚠️ '{ai_result}'은(는) 도감에 없는 새입니다.")
 
 st.divider()
 
-# ==========================================
-# 🛠️ 데이터 진단 (에러 확인용)
-# ==========================================
-with st.expander("🛠️ 데이터 진단"):
-    try:
-        df_debug = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        st.write("구글 시트 연결 상태: 정상")
-        st.write("▼ 현재 시트에 저장된 데이터 (최근 5줄):")
-        st.dataframe(df_debug.tail(5))
-    except Exception as e:
-        st.error(f"구글 시트를 읽어올 수 없습니다: {e}")
-
-with st.expander("📜 전체 기록 보기"):
-    st.write(f"총 {len(my_birds)}마리 발견")
+with st.expander("📜 내 도감 목록"):
     st.write(my_birds)
