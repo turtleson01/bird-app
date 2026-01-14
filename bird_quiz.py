@@ -73,8 +73,7 @@ st.title("🦅 나만의 탐조 도감")
 df = get_data()
 if 'bird_name' in df.columns:
     my_birds = df['bird_name'].tolist()
-    # 최신순으로 정렬해서 보여주기 위해 뒤집기
-    my_birds.reverse() 
+    my_birds.reverse() # 최신순 정렬
 else:
     my_birds = []
 
@@ -89,13 +88,34 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["📸 AI 분석", "✍️ 직접 입력"])
+# ⭐️ [수정됨] 탭 순서 변경: 직접 입력이 1번!
+tab1, tab2 = st.tabs(["✍️ 직접 입력", "📸 AI 분석"])
 
 # ------------------------------------------------
-# 탭 1: AI 사진 분석
+# 탭 1: 직접 입력 (이제 여기가 메인!)
 # ------------------------------------------------
 with tab1:
-    uploaded_files = st.file_uploader("새 사진을 올려주세요", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    st.write("##### 📝 발견한 새 이름을 기록하세요")
+    
+    def add_manual():
+        name = st.session_state.input_bird.strip()
+        if name:
+            res = save_data(name)
+            if res is True:
+                st.toast(f"✅ {name} 저장 완료!")
+                st.session_state.input_bird = "" # 입력창 비우기
+            else:
+                st.error(f"저장 실패: {res}")
+
+    # 엔터 치면 바로 저장
+    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 직박구리, 참새")
+
+# ------------------------------------------------
+# 탭 2: AI 사진 분석
+# ------------------------------------------------
+with tab2:
+    st.write("##### 📸 사진으로 새 이름 찾기")
+    uploaded_files = st.file_uploader("", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
     if uploaded_files:
         st.write(f"⚡️ **{len(uploaded_files)}장** 분석 중...")
@@ -122,27 +142,10 @@ with tab1:
                             else:
                                 st.error(f"저장 실패: {res}")
 
-# ------------------------------------------------
-# 탭 2: 직접 입력
-# ------------------------------------------------
-with tab2:
-    def add_manual():
-        name = st.session_state.input_bird.strip()
-        if name:
-            res = save_data(name)
-            if res is True:
-                st.toast(f"✅ {name} 저장 완료!")
-                st.session_state.input_bird = ""
-            else:
-                st.error(f"저장 실패: {res}")
-
-    st.text_input("새 이름 입력", key="input_bird", on_change=add_manual, placeholder="예: 직박구리")
-
 # --- [5. 하단: 저장된 목록] ---
 st.divider()
 with st.expander("📜 전체 기록 보기 (최신순)", expanded=True):
     if my_birds:
-        # 리스트 형태로 깔끔하게 출력
         for bird in my_birds:
             st.markdown(f"- 🐦 **{bird}**")
     else:
