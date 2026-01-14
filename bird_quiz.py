@@ -10,7 +10,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 모바일 최적화 및 버튼 디자인
+# CSS: 모바일 강제 가로 정렬 및 디자인 수정
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -18,24 +18,32 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 수직 중앙 정렬 (이름과 버튼 높이 맞추기) */
+            /* 수직 중앙 정렬 */
             div[data-testid="stHorizontalBlock"] {
                 align-items: center;
             }
             
-            /* 삭제 버튼 스타일: 작고 귀엽게 */
+            /* ⭐️ [핵심] Expander(기록보기) 안에서는 모바일이라도 무조건 가로로 배치! */
+            div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+            }
+            
+            /* 삭제 버튼 디자인: 작고 깔끔하게 */
             button[kind="secondary"] {
                 border-color: #ffcccc;
                 color: #ff4b4b;
-                padding: 0px 10px; /* 내부 여백을 줄임 */
-                font-size: 0.8rem;
-                height: 32px; /* 높이 고정 */
+                padding: 0px 8px; 
+                font-size: 0.75rem;
+                height: 30px;
                 line-height: 1;
+                min-height: 0px; /* 버튼 높이 최소값 해제 */
             }
             
-            /* 모바일에서 열 간격 좁히기 */
+            /* 모바일에서 열 간격 좁히기 (버튼 옆에 딱 붙게) */
             div[data-testid="column"] {
-                padding: 0 2px !important;
+                padding: 0 5px !important;
+                min-width: 0 !important;
             }
             </style>
             """
@@ -276,14 +284,14 @@ with st.expander("📜 전체 기록 보기", expanded=True):
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            # ⭐️ [핵심 수정] 모바일에서 버튼이 떨어지지 않게 비율을 6.5 : 3.5 로 조정
-            col_txt, col_btn = st.columns([0.65, 0.35], gap="small")
+            # ⭐️ 비율을 8:2로 주고, CSS로 강제 가로 배열시킴
+            col_txt, col_btn = st.columns([0.8, 0.2])
             
             with col_txt:
                 st.markdown(f"<div style='font-weight: 500; font-size: 1rem; margin-top: 5px;'>{display_no}. {bird}</div>", unsafe_allow_html=True)
             
             with col_btn:
-                # use_container_width=True 제거 (버튼 작게 유지)
+                # 버튼 크기 자동 조절 해제하고 작게 유지
                 if st.button("삭제", key=f"del_{index}_{bird}"):
                     res = delete_data(bird)
                     if res is True:
