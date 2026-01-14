@@ -99,7 +99,7 @@ if uploaded_file is not None:
             try:
                 # API 키 설정 (Secrets에서 가져옴)
                 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-pro')
                 
                 # AI에게 질문
                 prompt = "이 사진에 있는 새의 정확한 한국어 국명(Official Korean Name)만 딱 단어로 말해줘. 부가 설명 하지마. 만약 새가 아니라면 '새 아님'이라고 해."
@@ -153,3 +153,4 @@ with st.expander(f"📜 상세 기록 보기 ({found_count}종)"):
             st.write(f"- {b}")
     else:
         st.write("아직 기록이 없습니다.")
+
