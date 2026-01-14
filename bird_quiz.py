@@ -18,9 +18,11 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
+            /* 가로 배열 시 수직 중앙 정렬 */
             div[data-testid="stHorizontalBlock"] {
                 align-items: center;
             }
+            /* 삭제 버튼 빨갛게 */
             button[kind="secondary"] {
                 border-color: #ffcccc;
                 color: #ff4b4b;
@@ -213,7 +215,6 @@ with tab2:
                 reason = "결과 분석 중..."
 
             with st.container(border=True):
-                # 닫기 버튼
                 top_col1, top_col2 = st.columns([0.95, 0.05])
                 with top_col2:
                     if st.button("❌", key=f"close_{file.name}"):
@@ -235,17 +236,16 @@ with tab2:
                         if is_saved:
                             st.info("✅ 도감에 보관 중")
                         else:
-                            # '저장하기' -> '등록하기' 변경
                             if st.button(f"➕ 등록하기", key=f"btn_{file.name}"):
                                 res = save_data(bird_name)
                                 if res is True:
-                                    st.toast(f"✅ {bird_name} 등록 완료!") # 알림 메시지 통일
+                                    st.toast(f"✅ {bird_name} 등록 완료!")
                                     st.rerun()
                                 else:
                                     st.error(f"실패: {res}")
                         
                         # --- 💬 AI와 토론하기 ---
-                        with st.expander("🤔 다른 새 같은가요?"): # (재분석 요청) 글자 삭제
+                        with st.expander("🤔 다른 새 같은가요?"):
                             def retry_analysis(f_name, img_file):
                                 user_input = st.session_state[f"doubt_{f_name}"]
                                 if user_input:
@@ -256,7 +256,6 @@ with tab2:
                                     # 자동 리런됨
 
                             st.text_input("어떤 새라고 생각하시나요?", key=f"doubt_{file.name}")
-                            # 버튼 이름 변경
                             st.button("재분석 요청", key=f"ask_{file.name}", 
                                       on_click=retry_analysis, args=(file.name, file))
 
@@ -269,13 +268,15 @@ with st.expander("📜 전체 기록 보기", expanded=True):
             real_no = BIRD_MAP.get(bird, 9999)
             display_no = "??" if real_no == 9999 else real_no
             
-            col_txt, col_btn = st.columns([0.8, 0.2])
+            # ⭐️ [핵심 수정] 모바일에서 줄 바꿈 안 되게 비율 조정 (0.8/0.2 -> 0.65/0.35)
+            col_txt, col_btn = st.columns([0.65, 0.35])
             
             with col_txt:
                 st.markdown(f"<div style='padding-top: 5px;'><b>{display_no}. {bird}</b></div>", unsafe_allow_html=True)
             
             with col_btn:
-                if st.button("삭제", key=f"del_{index}_{bird}"):
+                # use_container_width=True 로 버튼이 칸을 꽉 채우게 (터치하기 좋음)
+                if st.button("삭제", key=f"del_{index}_{bird}", use_container_width=True):
                     res = delete_data(bird)
                     if res is True:
                         st.toast(f"🗑️ {bird} 삭제됨")
