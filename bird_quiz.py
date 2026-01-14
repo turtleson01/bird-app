@@ -3,7 +3,7 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
 from PIL import Image
-import concurrent.futures # 병렬 처리를 위한 도구
+import concurrent.futures # 병렬 처리 도구
 
 # --- [설정] ---
 try:
@@ -55,14 +55,14 @@ def add_bird_to_sheet(user_name, bird_name):
     except:
         return False
 
-# ⭐️ AI 분석 함수 (Flash 모델로 변경하여 속도/안정성 확보)
+# ⭐️ [핵심] AI 분석 함수
+# 2.5 Flash 모델 사용 (존재 확인됨 + 속도 빠름 + 유료 계정이라 제한 없음)
 def analyze_bird_image(image):
     try:
         genai.configure(api_key=API_KEY)
         
-        # [변경] 1.5 Pro 대신 'gemini-1.5-flash' 사용
-        # 이유: 404 에러 방지 + 속도가 훨씬 빠름 + 조류 식별에 충분한 성능
-        model = genai.GenerativeModel('gemini-1.5-flash') 
+        # 404 안 뜨는 확실한 모델 'gemini-2.5-flash' 사용
+        model = genai.GenerativeModel('gemini-2.5-flash') 
         
         prompt = """
         당신은 한국의 야생 조류 전문가입니다.
@@ -139,7 +139,7 @@ st.text_input("새 이름을 입력하세요", key="bird_input", on_change=handl
 st.divider()
 
 # ==========================================
-# 2. [병렬 처리 모드] 멘트 수정 + 속도 개선
+# 2. [병렬 처리 모드] 2.5 Flash + 심플 멘트
 # ==========================================
 st.subheader("🤖 AI에게 물어보기")
 
@@ -151,11 +151,10 @@ if uploaded_files:
     images = [Image.open(file) for file in uploaded_files]
     results = []
 
-    # ⭐️ [멘트 수정] 아주 심플하게!
+    # ⭐️ 멘트: "분석 중..." 하나로 심플하게 통일
     with st.spinner("분석 중..."):
-        # 병렬 처리 (여러 장 동시 분석)
+        # 병렬 처리로 여러 장 동시에 요청 (속도 극대화)
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            # 순서 보장을 위해 map 사용
             results = list(executor.map(analyze_bird_image, images))
 
     # 결과 출력
@@ -170,9 +169,9 @@ if uploaded_files:
                 # 결과 헤더
                 st.subheader(f"👉 {ai_result}")
                 
-                # 에러 처리
+                # 에러 및 결과 처리
                 if "Error" in ai_result:
-                    st.error(f"오류: {ai_result}")
+                    st.error(f"오류가 발생했습니다: {ai_result}")
                 elif ai_result == "새 아님":
                     st.error("새를 찾을 수 없습니다.")
                 else:
