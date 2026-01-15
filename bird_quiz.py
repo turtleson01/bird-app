@@ -9,7 +9,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 설정 (버튼 숨김 로직 수정 및 색상 조정)
+# CSS: 디자인 설정 (사이드바 스타일 추가)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -29,8 +29,7 @@ hide_streamlit_style = """
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* ⭐️ [수정] 파일 업로더 CSS 수정 */
-            /* 'Browse files' 버튼만 콕 집어서 숨김 (업로드된 파일 리스트의 X 버튼은 살림) */
+            /* 파일 업로더 'Browse files' 버튼 숨기기 */
             [data-testid="stFileUploaderDropzone"] button {
                 display: none !important;
             }
@@ -47,9 +46,9 @@ hide_streamlit_style = """
             }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
-            /* ⭐️ [수정] 등록 버튼 (색상 더 연하게, 부드러운 하늘색 계열) */
+            /* 파란색 등록 버튼 */
             div.stButton > button[kind="primary"] {
-                background: linear-gradient(45deg, #64B5F6, #90CAF9); /* 훨씬 연한 파란색 */
+                background: linear-gradient(45deg, #64B5F6, #90CAF9); 
                 color: white !important;
                 border: none;
                 border-radius: 12px;
@@ -58,7 +57,7 @@ hide_streamlit_style = """
                 transition: all 0.3s ease;
                 box-shadow: 0 3px 5px rgba(0,0,0,0.1);
                 width: 100%;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.1); /* 글자 가독성 확보 */
+                text-shadow: 0 1px 2px rgba(0,0,0,0.1);
             }
             div.stButton > button[kind="primary"]:hover {
                 transform: translateY(-2px);
@@ -71,6 +70,12 @@ hide_streamlit_style = """
                 color: #ff4b4b;
                 border: 1px solid #ffcccc;
                 border-radius: 8px;
+            }
+            
+            /* 사이드바 스타일 */
+            [data-testid="stSidebar"] {
+                background-color: #f8f9fa;
+                border-right: 1px solid #eee;
             }
             </style>
             """
@@ -87,19 +92,37 @@ except:
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
-    if not os.path.exists(file_path): return {}
+    if not os.path.exists(file_path): return {}, {}
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
+    
     for enc in encodings:
         try:
+            # ⭐️ [중요] 족보 파일 구조 가정: 2열=과(Family), 4열=이름(Name)
+            # data.csv의 구조가 [번호, 목, 과, 학명, 국명] 이라고 가정함
             df = pd.read_csv(file_path, skiprows=2, encoding=enc)
-            bird_data = df.iloc[:, [4]].dropna() 
-            bird_data.columns = ['name']
-            bird_list = bird_data['name'].str.strip().tolist()
-            return {name: i + 1 for i, name in enumerate(bird_list)}
+            
+            # 필요한 컬럼만 추출 (인덱스 2: 과, 인덱스 4: 국명)
+            # 만약 에러가 난다면 data.csv의 컬럼 수가 부족한 것임
+            bird_data = df.iloc[:, [2, 4]].dropna() 
+            bird_data.columns = ['family', 'name']
+            
+            bird_data['name'] = bird_data['name'].str.strip()
+            bird_data['family'] = bird_data['family'].str.strip()
+            
+            # 1. 이름 -> 번호 매핑
+            bird_list = bird_data['name'].tolist()
+            name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
+            
+            # 2. 이름 -> 과 매핑 (통계용)
+            name_to_family = dict(zip(bird_data['name'], bird_data['family']))
+            
+            return name_to_no, name_to_family
         except: continue
-    return {}
+        
+    return {}, {}
 
-BIRD_MAP = load_bird_map()
+# 매핑 데이터 로드
+BIRD_MAP, FAMILY_MAP = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
@@ -163,6 +186,35 @@ def analyze_bird_image(image, user_doubt=None):
 st.title("🦅 나의 탐조 도감")
 
 df = get_data()
+
+# ⭐️ [사이드바 구현] 과별 수집 현황
+with st.sidebar:
+    st.header("📊 과별 수집 현황")
+    st.write("내가 모은 새들을 '과(Family)'별로 확인해보세요!")
+    
+    if not df.empty and FAMILY_MAP:
+        # 수집된 새 이름에 해당하는 '과' 정보를 매핑
+        df['family'] = df['bird_name'].map(FAMILY_MAP)
+        
+        # 과별 개수 집계
+        family_counts = df['family'].value_counts()
+        
+        # 데이터프레임으로 깔끔하게 표시
+        st.dataframe(
+            family_counts, 
+            use_container_width=True, 
+            column_config={"family": "과 이름", "count": "마리"}
+        )
+        
+        # (선택) 차트로 보고 싶다면 아래 주석 해제
+        # st.bar_chart(family_counts)
+    else:
+        if df.empty:
+            st.info("아직 수집된 새가 없습니다.")
+        elif not FAMILY_MAP:
+            st.warning("data.csv에서 '과' 정보를 읽지 못했습니다. (3번째 열 확인 필요)")
+
+# 메인 요약 박스
 st.markdown(f"""
     <div class="summary-box">
         <span class="summary-text">🌱 현재까지 모은 도감</span><br>
@@ -187,15 +239,12 @@ with tab1:
 
 with tab2:
     st.subheader("사진으로 이름 찾기")
-    # 업로드 버튼(Browse files)은 CSS로 숨겨졌지만, 파일 목록의 X버튼은 살아있습니다.
+    # accept_multiple_files=True 옵션으로 여러 장 업로드 가능
     uploaded_files = st.file_uploader("새 사진 업로드 (터치 또는 클릭)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
     if 'ai_results' not in st.session_state: st.session_state.ai_results = {}
     
-    # ⭐️ dismiss 로직 제거: 파일 업로더의 기본 X 기능을 활용하므로 dismissed_files 관련 로직 삭제
-
     if uploaded_files:
-        # 업로더에 파일이 있으면 분석
         for file in uploaded_files:
             if file.name not in st.session_state.ai_results:
                 with st.spinner(f"🔍 {file.name} 분석 중..."):
@@ -221,19 +270,14 @@ with tab2:
                 is_valid_bird = False
 
             with st.container(border=True):
-                # ⭐️ [수정] 닫기 버튼(X) 코드 완전히 삭제
-                # 사용자는 파일 업로더 목록의 X를 눌러서 닫으면 됩니다.
-
                 c1, c2 = st.columns([1, 1.5])
                 with c1: st.image(file, use_container_width=True)
                 with c2:
                     if is_valid_bird:
-                        # ⭐️ [수정] "🏷️ 이름:" 제거, 이름만 깔끔하게
                         st.markdown(f"### **{bird_name}**")
                         st.markdown(f"**🔍 판단 이유**")
                         st.info(reason)
                         
-                        # ⭐️ [수정] + 표시 제거, 색상 연하게 변경됨
                         if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                             res = save_data(bird_name)
                             if res is True: 
