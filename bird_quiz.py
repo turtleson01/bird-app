@@ -118,29 +118,6 @@ except:
 
 # --- [2. 데이터 및 족보 관리] ---
 
-# ⭐️ [핵심] 영문 과명 -> 한글 과명 자동 변환 사전
-FAMILY_KO_DICT = {
-    "Accipitridae": "수리과", "Acrocephalidae": "개개비과", "Aegithalidae": "오목눈이과",
-    "Alaudidae": "종다리과", "Alcedinidae": "물총새과", "Anatidae": "오리과",
-    "Apodidae": "칼새과", "Ardeidae": "백로과", "Artamidae": "숲제비과",
-    "Bombycillidae": "여새과", "Caprimulgidae": "쏙독새과", "Charadriidae": "물떼새과",
-    "Ciconiidae": "황새과", "Cinclidae": "물까마귀과", "Columbidae": "비둘기과",
-    "Corvidae": "까마귀과", "Cuculidae": "두견과", "Emberizidae": "멧새과",
-    "Falconidae": "매과", "Fringillidae": "되새과", "Gaviidae": "아비과",
-    "Gruidae": "두루미과", "Hirundinidae": "제비과", "Laniidae": "때까치과",
-    "Laridae": "갈매기과", "Leiothrichidae": "조자이꼬리치레과", "Locustellidae": "섬개개비과",
-    "Motacillidae": "할미새과", "Muscicapidae": "솔딱새과", "Oriolidae": "꾀꼬리과",
-    "Paridae": "박새과", "Passeridae": "참새과", "Phalacrocoracidae": "가마우지과",
-    "Phasianidae": "꿩과", "Phylloscopidae": "솔새과", "Picidae": "딱따구리과",
-    "Podicipedidae": "논병아리과", "Procellariidae": "슴새과", "Prunellidae": "바위종다리과",
-    "Pycnonotidae": "직박구리과", "Rallidae": "뜸부기과", "Recurvirostridae": "장다리물떼새과",
-    "Regulidae": "상모솔새과", "Remizidae": "스윈호오목눈이과", "Scolopacidae": "도요과",
-    "Sittidae": "동고비과", "Strigidae": "올빼미과", "Sturnidae": "찌르레기과",
-    "Sulidae": "얼가니새과", "Sylviidae": "비단털쥐발귀과", "Threskiornithidae": "저어새과",
-    "Timaliidae": "꼬리치레과", "Troglodytidae": "굴뚝새과", "Turdidae": "지빠귀과",
-    "Upupidae": "후투티과", "Zosteropidae": "동박새과"
-}
-
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -149,61 +126,45 @@ def load_bird_map():
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # 1. 헤더 위치 자동 탐색
-            header_row_idx = 0
-            with open(file_path, 'r', encoding=enc) as f:
-                lines = [f.readline() for _ in range(10)]
-                for i, line in enumerate(lines):
-                    line_lower = line.lower()
-                    if (('family' in line_lower or '과' in line_lower) and 
-                        ('name' in line_lower or '국명' in line_lower)):
-                        header_row_idx = i
-                        break
+            # ⭐️ [핵심 수정] 헤더나 번역기 없이, 파일의 위치(Index)로 정확하게 데이터를 찝어냅니다.
+            # 4번 열(E): 대표국명 (새 이름)
+            # 14번 열(O): Family 국명 (과 이름 - 한글)
             
-            df = pd.read_csv(file_path, header=header_row_idx, encoding=enc)
+            # header=None으로 읽어서 모든 줄을 데이터로 가져옵니다.
+            df = pd.read_csv(file_path, header=None, encoding=enc)
             
-            def find_col_name(cols, keywords):
-                for col in cols:
-                    for kw in keywords:
-                        if kw in str(col).lower(): return col
-                return None
+            # 컬럼 개수가 충분한지 확인
+            if df.shape[1] < 15: continue
+
+            # 4번 열과 14번 열만 추출
+            bird_data = df.iloc[:, [4, 14]].copy()
+            bird_data.columns = ['name', 'family']
             
-            # 우선순위: 한글 헤더 > 영문 헤더
-            family_col = find_col_name(df.columns, ['과', '과명', 'family', 'familia'])
-            name_col = find_col_name(df.columns, ['name', '국명', '이름', 'ko_name'])
-            
-            # 헤더 못 찾으면 인덱스로 접근 (C열=2, E열=4)
-            if not family_col or not name_col:
-                if df.shape[1] >= 5:
-                    bird_data = df.iloc[:, [2, 4]]
-                else: continue
-            else:
-                bird_data = df[[family_col, name_col]]
-                
-            bird_data.columns = ['family', 'name']
+            # 결측치 제거
             bird_data = bird_data.dropna()
             
+            # 데이터 정제 (공백 제거)
             bird_data['name'] = bird_data['name'].astype(str).str.strip()
             bird_data['family'] = bird_data['family'].astype(str).str.strip()
             
-            # 이상한 데이터 필터링
-            filter_keywords = ['과', 'Family', '이명', '정명']
+            # ⭐️ [필터링] 엑셀의 제목 줄(대표국명, 국명, NaN 등) 제거
+            filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과', 'nan']
+            # 이름이나 과 이름이 저 키워드에 포함되면 데이터가 아니므로 제외
+            bird_data = bird_data[~bird_data['name'].isin(filter_keywords)]
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
-            # ⭐️ [한글 변환] 영문 과명을 한글로 변환
-            bird_data['family'] = bird_data['family'].apply(lambda x: FAMILY_KO_DICT.get(x, x))
-
-            # ⭐️ [수정] 중복 포함 전체 개수 계산 (엑셀 줄 수 기준)
+            # 전체 종 수 (중복 포함 엑셀 줄 수)
             total_rows_count = len(bird_data)
 
             # 매핑 데이터 생성
             bird_list = bird_data['name'].tolist()
-            name_to_no = {name: i + 1 for i, name in enumerate(bird_list)} # 중복 이름은 마지막 번호로 매핑됨
+            name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
             family_total_counts = bird_data['family'].value_counts().to_dict()
             
             return name_to_no, name_to_family, total_rows_count, family_total_counts
-        except: continue
+        except Exception as e:
+            continue
         
     return {}, {}, 0, {}
 
@@ -268,7 +229,7 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [사이드바] 카드형 과별 수집 현황 (한글)
+# ⭐️ [사이드바] 카드형 과별 수집 현황 (파일 원본 한글 사용)
 with st.sidebar:
     st.header("📊 과별 수집 현황")
     st.caption("전체 도감 대비 내가 모은 새")
@@ -277,7 +238,6 @@ with st.sidebar:
     if FAMILY_TOTAL_COUNTS:
         my_family_counts = {}
         if not df.empty and FAMILY_MAP:
-            # 내 데이터의 과 정보도 한글 매핑 적용
             df['family'] = df['bird_name'].map(FAMILY_MAP)
             my_family_counts = df['family'].value_counts().to_dict()
         
@@ -299,11 +259,10 @@ with st.sidebar:
             """, unsafe_allow_html=True)
             
     else:
-        st.warning("⚠️ 족보 파일(data.csv)에서 '과(Family)' 정보를 읽지 못했습니다.")
+        st.warning("⚠️ 족보 파일(data.csv) 형식을 확인해주세요.")
 
-# ⭐️ 메인 요약 박스 + 진행바 (전체 개수 수정됨)
+# ⭐️ 메인 요약 박스 + 진행바
 total_collected = len(df)
-# TOTAL_SPECIES_COUNT는 이제 중복을 포함한 엑셀 전체 줄 수(602)입니다.
 total_species = TOTAL_SPECIES_COUNT if TOTAL_SPECIES_COUNT > 0 else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
 
