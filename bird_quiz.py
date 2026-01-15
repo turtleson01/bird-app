@@ -9,12 +9,12 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 설정 (사이드바 스타일 추가)
+# CSS: 디자인 설정 (헤더 보이게 수정)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
-            header {visibility: hidden;}
+            /* header {visibility: hidden;}  <-- 🚨 이 줄을 삭제해서 사이드바 버튼을 살렸습니다! */
             .stApp {padding-top: 10px;}
             
             /* 도감 요약 박스 */
@@ -72,9 +72,9 @@ hide_streamlit_style = """
                 border-radius: 8px;
             }
             
-            /* 사이드바 스타일 */
+            /* 사이드바 스타일 (배경색 조정) */
             [data-testid="stSidebar"] {
-                background-color: #f8f9fa;
+                background-color: #fcfcfc;
                 border-right: 1px solid #eee;
             }
             </style>
@@ -97,12 +97,10 @@ def load_bird_map():
     
     for enc in encodings:
         try:
-            # ⭐️ [중요] 족보 파일 구조 가정: 2열=과(Family), 4열=이름(Name)
-            # data.csv의 구조가 [번호, 목, 과, 학명, 국명] 이라고 가정함
+            # 족보 파일 구조: 2열(C)=과(Family), 4열(E)=이름(Name)
             df = pd.read_csv(file_path, skiprows=2, encoding=enc)
             
-            # 필요한 컬럼만 추출 (인덱스 2: 과, 인덱스 4: 국명)
-            # 만약 에러가 난다면 data.csv의 컬럼 수가 부족한 것임
+            # 필요한 컬럼만 추출
             bird_data = df.iloc[:, [2, 4]].dropna() 
             bird_data.columns = ['family', 'name']
             
@@ -205,14 +203,11 @@ with st.sidebar:
             use_container_width=True, 
             column_config={"family": "과 이름", "count": "마리"}
         )
-        
-        # (선택) 차트로 보고 싶다면 아래 주석 해제
-        # st.bar_chart(family_counts)
     else:
         if df.empty:
             st.info("아직 수집된 새가 없습니다.")
         elif not FAMILY_MAP:
-            st.warning("data.csv에서 '과' 정보를 읽지 못했습니다. (3번째 열 확인 필요)")
+            st.warning("족보 파일에서 '과' 정보를 찾지 못했습니다.")
 
 # 메인 요약 박스
 st.markdown(f"""
@@ -239,7 +234,6 @@ with tab1:
 
 with tab2:
     st.subheader("사진으로 이름 찾기")
-    # accept_multiple_files=True 옵션으로 여러 장 업로드 가능
     uploaded_files = st.file_uploader("새 사진 업로드 (터치 또는 클릭)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
     if 'ai_results' not in st.session_state: st.session_state.ai_results = {}
