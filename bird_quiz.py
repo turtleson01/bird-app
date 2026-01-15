@@ -9,43 +9,82 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 설정
+# CSS: 디자인 설정 (카드형 사이드바, 진행바, 심플 박스)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 도감 요약 박스 */
+            /* 1. 도감 요약 박스 (테두리 없음, 깔끔) */
             .summary-box {
                 padding: 20px; 
                 border-radius: 15px; 
                 background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-                margin-bottom: 25px;
+                margin-bottom: 10px; /* 아래 진행바와의 간격 */
                 box-shadow: 0 4px 6px rgba(0,0,0,0.05);
                 text-align: left;
             }
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* 파일 업로더 버튼 숨기기 */
-            [data-testid="stFileUploaderDropzone"] button {
-                display: none !important;
+            /* 2. 연두색 진행바 컨테이너 */
+            .progress-container {
+                width: 100%;
+                background-color: #f1f3f5;
+                border-radius: 10px;
+                margin-bottom: 30px;
+                height: 12px;
+                overflow: hidden;
             }
-            [data-testid="stFileUploaderDropzone"] section {
-                cursor: pointer;
+            .progress-bar {
+                height: 100%;
+                background-color: #66bb6a; /* 연두색 */
+                border-radius: 10px;
+                transition: width 0.5s ease-in-out;
             }
-
-            /* 목록 스타일 */
-            .bird-item { 
-                font-size: 1.1rem; 
-                padding: 12px 5px; 
-                font-weight: 500; 
+            
+            /* 3. 사이드바 카드 스타일 */
+            .sidebar-card {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 12px 15px;
+                margin-bottom: 8px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                transition: transform 0.2s;
+            }
+            .sidebar-card:hover {
+                transform: translateX(3px);
+                border-color: #81c784;
+            }
+            .card-title {
+                font-size: 0.95rem;
+                font-weight: 600;
                 color: #333;
             }
+            .card-stat {
+                font-size: 0.9rem;
+                color: #666;
+                font-weight: 500;
+            }
+            .stat-highlight {
+                color: #2e7d32;
+                font-weight: 700;
+            }
+            
+            /* 파일 업로더 버튼 숨기기 */
+            [data-testid="stFileUploaderDropzone"] button { display: none !important; }
+            [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
+
+            /* 목록 스타일 */
+            .bird-item { font-size: 1.1rem; padding: 12px 5px; font-weight: 500; color: #333; }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
-            /* 등록 버튼 */
+            /* 버튼 스타일 */
             div.stButton > button[kind="primary"] {
                 background: linear-gradient(45deg, #64B5F6, #90CAF9); 
                 color: white !important;
@@ -53,17 +92,9 @@ hide_streamlit_style = """
                 border-radius: 12px;
                 padding: 0.6rem 1rem;
                 font-weight: 700;
-                transition: all 0.3s ease;
-                box-shadow: 0 3px 5px rgba(0,0,0,0.1);
                 width: 100%;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                box-shadow: 0 3px 5px rgba(0,0,0,0.1);
             }
-            div.stButton > button[kind="primary"]:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 5px 10px rgba(0,0,0,0.15);
-            }
-            
-            /* 삭제 버튼 */
             div.stButton > button[kind="secondary"] {
                 background-color: white;
                 color: #ff4b4b;
@@ -71,24 +102,10 @@ hide_streamlit_style = """
                 border-radius: 8px;
             }
             
-            /* 사이드바 스타일 */
+            /* 사이드바 배경 */
             [data-testid="stSidebar"] {
-                background-color: #fcfcfc;
+                background-color: #fafafa;
                 border-right: 1px solid #eee;
-            }
-            
-            /* 사이드바 내 수집 현황 텍스트 스타일 */
-            .family-stat {
-                display: flex;
-                justify-content: space-between;
-                padding: 6px 0;
-                border-bottom: 1px dotted #ddd;
-                font-size: 0.95rem;
-                color: #444;
-            }
-            .stat-count {
-                font-weight: bold;
-                color: #2e7d32;
             }
             </style>
             """
@@ -110,24 +127,28 @@ def load_bird_map():
     
     for enc in encodings:
         try:
-            # data.csv 구조 가정: 2열(C)=과(Family), 4열(E)=이름(Name)
+            # data.csv 가정: [번호, 목, 과, 학명, 국명] -> 인덱스 2(과), 4(국명)
             df = pd.read_csv(file_path, skiprows=2, encoding=enc)
             
+            # 필요한 컬럼 추출
             bird_data = df.iloc[:, [2, 4]].dropna() 
             bird_data.columns = ['family', 'name']
             
             bird_data['name'] = bird_data['name'].str.strip()
             bird_data['family'] = bird_data['family'].str.strip()
             
-            # 1. 이름 -> 번호 매핑
+            # 헤더나 이상한 데이터 필터링 (가장 중요!)
+            filter_keywords = ['과', 'Family', '이명', '정명', 'Scientific Name']
+            bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
+
+            # 1. 이름 -> 번호
             bird_list = bird_data['name'].tolist()
             name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
             
-            # 2. 이름 -> 과 매핑 (나의 수집 통계용)
+            # 2. 이름 -> 과
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
             
-            # 3. 과 -> 전체 마리수 매핑 (전체 통계용)
-            # 예: {'오리과': 15, '백로과': 8, ...}
+            # 3. 과 -> 전체 개수
             family_total_counts = bird_data['family'].value_counts().to_dict()
             
             return name_to_no, name_to_family, family_total_counts
@@ -135,7 +156,6 @@ def load_bird_map():
         
     return {}, {}, {}
 
-# 매핑 데이터 로드 (리턴값 3개)
 BIRD_MAP, FAMILY_MAP, FAMILY_TOTAL_COUNTS = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -177,21 +197,17 @@ def analyze_bird_image(image, user_doubt=None):
     try:
         genai.configure(api_key=API_KEY)
         model = genai.GenerativeModel('gemini-2.5-flash') 
-        
         system_instruction = """
         당신은 조류 전문가입니다. 사진을 분석하여 결과를 다음 형식으로 출력하세요:
         정답형식: 종명 | 판단근거
-        
         [규칙]
         1. '새이름', '종명', '이름' 같은 단어를 정답 자리에 절대 쓰지 마세요.
         2. 구체적인 새의 이름(예: 참새, 까치)을 모른다면 차라리 '새 아님'이라고 하세요.
         3. 새가 아닌 사진이면 '새 아님 | 새를 찾을 수 없습니다'라고 출력하세요.
         """
-        
         prompt = f"{system_instruction}"
         if user_doubt:
             prompt += f"\n사용자 반론: '{user_doubt}'. 이를 참고하여 다시 분석하세요."
-            
         response = model.generate_content([prompt, image])
         return response.text.strip()
     except: return "Error | 분석 오류"
@@ -201,51 +217,54 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [사이드바 구현] 과별 수집 현황 (텍스트 리스트 형태)
+# ⭐️ [사이드바] 카드형 과별 수집 현황
 with st.sidebar:
     st.header("📊 과별 수집 현황")
-    st.caption("전체 도감 대비 내가 모은 새 (수집/전체)")
-    st.divider()
+    st.caption("전체 도감 대비 내가 모은 새")
+    st.write("") # 간격
     
-    if FAMILY_TOTAL_COUNTS: # 족보 데이터가 있을 때만 표시
+    if FAMILY_TOTAL_COUNTS:
         # 내 수집 현황 계산
         my_family_counts = {}
         if not df.empty and FAMILY_MAP:
             df['family'] = df['bird_name'].map(FAMILY_MAP)
             my_family_counts = df['family'].value_counts().to_dict()
         
-        # 가나다 순으로 정렬하여 출력
         sorted_families = sorted(FAMILY_TOTAL_COUNTS.keys())
         
         for family in sorted_families:
             total = FAMILY_TOTAL_COUNTS[family]
             count = my_family_counts.get(family, 0)
             
-            # 수집된 게 있으면 진하게 표시, 없으면 연하게
-            if count > 0:
-                row_style = "color:#111; font-weight:600;"
-                count_style = "color:#2e7d32;"
-            else:
-                row_style = "color:#999;"
-                count_style = "color:#999;"
-
+            # 수집된 게 있으면 강조 스타일
+            highlight_class = "stat-highlight" if count > 0 else ""
+            
+            # HTML 카드 렌더링
             st.markdown(f"""
-            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dotted #eee; {row_style}">
-                <span>{family}</span>
-                <span style="{count_style}">{count} / {total}</span>
+            <div class="sidebar-card">
+                <div class="card-title">{family}</div>
+                <div class="card-stat">
+                    <span class="{highlight_class}">{count}</span> / {total}
+                </div>
             </div>
             """, unsafe_allow_html=True)
             
     else:
-        st.warning("⚠️ data.csv 파일을 읽지 못했거나 '과' 정보가 없습니다.")
+        st.warning("⚠️ data.csv '과' 정보를 읽지 못했습니다.")
 
+# ⭐️ 메인 요약 박스 + ⭐️ 연두색 진행바
+total_collected = len(df)
+total_species = len(BIRD_MAP) if BIRD_MAP else 1
+progress_percent = (total_collected / total_species) * 100
 
-# 메인 요약 박스
 st.markdown(f"""
     <div class="summary-box">
         <span class="summary-text">🌱 현재까지 모은 도감</span><br>
-        <span class="summary-count">{len(df)}</span>
-        <span class="summary-text"> 마리</span>
+        <span class="summary-count">{total_collected}</span>
+        <span class="summary-text"> 마리 / 전체 {total_species}종</span>
+    </div>
+    <div class="progress-container">
+        <div class="progress-bar" style="width: {progress_percent}%;"></div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -284,11 +303,10 @@ with tab2:
                 bird_name = raw.strip()
                 reason = "상세 이유를 가져오지 못했습니다."
             
-            # 필터링
             invalid_keywords = ["새이름", "종명", "이름", "새 이름", "모름", "알수없음"]
             if bird_name in invalid_keywords:
                 bird_name = "판독 불가"
-                reason = "AI가 구체적인 종을 식별하지 못했습니다."
+                reason = "AI가 식별하지 못했습니다."
 
             is_valid_bird = True
             if bird_name in ["새 아님", "Error", "판독 불가"] or "오류" in bird_name:
@@ -302,7 +320,6 @@ with tab2:
                         st.markdown(f"### **{bird_name}**")
                         st.markdown(f"**🔍 판단 이유**")
                         st.info(reason)
-                        
                         if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                             res = save_data(bird_name)
                             if res is True: 
@@ -340,7 +357,6 @@ if not df.empty:
         bird = row['bird_name']
         real_no = BIRD_MAP.get(bird, 9999)
         display_no = "??" if real_no == 9999 else real_no
-        
         st.markdown(f"""
         <div style="display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:8px 0; border-bottom:1px solid #eee;">
             <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
