@@ -9,7 +9,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 심플화 (테두리 제거, 업로드 버튼 숨김)
+# CSS: 디자인 설정 (버튼 색상 변경 포함)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -17,12 +17,11 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 1. 도감 요약 박스: 진한 초록색 테두리 제거 */
+            /* 도감 요약 박스 (테두리 없음) */
             .summary-box {
                 padding: 20px; 
                 border-radius: 15px; 
                 background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-                /* border-left: 6px solid #2e7d32;  <-- 이 부분을 삭제했습니다 */
                 margin-bottom: 25px;
                 box-shadow: 0 4px 6px rgba(0,0,0,0.05);
                 text-align: left;
@@ -30,11 +29,10 @@ hide_streamlit_style = """
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* 2. 파일 업로더: 'Browse files' 버튼 숨기기 */
+            /* 파일 업로더 'Browse files' 버튼 숨기기 */
             [data-testid="stFileUploader"] button {
                 display: none !important;
             }
-            /* 업로드 영역 전체를 클릭 가능하게 보이도록 커서 설정 */
             [data-testid="stFileUploader"] section {
                 cursor: pointer;
             }
@@ -48,9 +46,10 @@ hide_streamlit_style = """
             }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
-            /* 파란색 등록 버튼 */
+            /* ⭐️ [수정] 파란색 등록 버튼 (더 연하고 밝게, 아이콘 제거) */
             div.stButton > button[kind="primary"] {
-                background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
+                /* 기존의 진한 색에서 밝은 파란색 그라데이션으로 변경 */
+                background: linear-gradient(45deg, #2196F3, #64B5F6); 
                 color: white !important;
                 border: none;
                 border-radius: 12px;
@@ -187,7 +186,6 @@ with tab1:
 
 with tab2:
     st.subheader("사진으로 이름 찾기")
-    # 'Browse files' 버튼은 CSS로 숨겼으므로 드래그앤드롭 영역만 보입니다.
     uploaded_files = st.file_uploader("새 사진 업로드 (터치 또는 클릭)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
     if 'ai_results' not in st.session_state: st.session_state.ai_results = {}
@@ -220,6 +218,7 @@ with tab2:
                 is_valid_bird = False
 
             with st.container(border=True):
+                # 닫기 버튼 (우측 상단에 유지)
                 top_c1, top_c2 = st.columns([0.9, 0.1])
                 if top_c2.button("✕", key=f"cls_{file.name}"):
                     st.session_state.dismissed_files.add(file.name); st.rerun()
@@ -228,11 +227,13 @@ with tab2:
                 with c1: st.image(file, use_container_width=True)
                 with c2:
                     if is_valid_bird:
-                        st.markdown(f"### 🏷️ 이름: **{bird_name}**")
+                        # ⭐️ [수정] "🏷️ 이름: " 제거하고 이름만 크게 표시
+                        st.markdown(f"### **{bird_name}**")
                         st.markdown(f"**🔍 판단 이유**")
                         st.info(reason)
                         
-                        if st.button(f"➕ 도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
+                        # ⭐️ [수정] ➕ 아이콘 제거, 버튼 색상은 CSS에서 밝게 변경됨
+                        if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                             res = save_data(bird_name)
                             if res is True: 
                                 st.balloons()
@@ -270,7 +271,6 @@ if not df.empty:
         real_no = BIRD_MAP.get(bird, 9999)
         display_no = "??" if real_no == 9999 else real_no
         
-        # 번호와 이름 왼쪽 정렬 (gap: 12px)
         st.markdown(f"""
         <div style="display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:8px 0; border-bottom:1px solid #eee;">
             <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
