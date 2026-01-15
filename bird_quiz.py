@@ -9,12 +9,11 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 설정 (헤더 보이게 수정)
+# CSS: 디자인 설정
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
-            /* header {visibility: hidden;}  <-- 🚨 이 줄을 삭제해서 사이드바 버튼을 살렸습니다! */
             .stApp {padding-top: 10px;}
             
             /* 도감 요약 박스 */
@@ -29,7 +28,7 @@ hide_streamlit_style = """
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* 파일 업로더 'Browse files' 버튼 숨기기 */
+            /* 파일 업로더 버튼 숨기기 */
             [data-testid="stFileUploaderDropzone"] button {
                 display: none !important;
             }
@@ -46,7 +45,7 @@ hide_streamlit_style = """
             }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
-            /* 파란색 등록 버튼 */
+            /* 등록 버튼 */
             div.stButton > button[kind="primary"] {
                 background: linear-gradient(45deg, #64B5F6, #90CAF9); 
                 color: white !important;
@@ -64,7 +63,7 @@ hide_streamlit_style = """
                 box-shadow: 0 5px 10px rgba(0,0,0,0.15);
             }
             
-            /* 빨간색 삭제 버튼 */
+            /* 삭제 버튼 */
             div.stButton > button[kind="secondary"] {
                 background-color: white;
                 color: #ff4b4b;
@@ -72,10 +71,24 @@ hide_streamlit_style = """
                 border-radius: 8px;
             }
             
-            /* 사이드바 스타일 (배경색 조정) */
+            /* 사이드바 스타일 */
             [data-testid="stSidebar"] {
                 background-color: #fcfcfc;
                 border-right: 1px solid #eee;
+            }
+            
+            /* 사이드바 내 수집 현황 텍스트 스타일 */
+            .family-stat {
+                display: flex;
+                justify-content: space-between;
+                padding: 6px 0;
+                border-bottom: 1px dotted #ddd;
+                font-size: 0.95rem;
+                color: #444;
+            }
+            .stat-count {
+                font-weight: bold;
+                color: #2e7d32;
             }
             </style>
             """
@@ -92,15 +105,14 @@ except:
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
-    if not os.path.exists(file_path): return {}, {}
+    if not os.path.exists(file_path): return {}, {}, {}
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     
     for enc in encodings:
         try:
-            # 족보 파일 구조: 2열(C)=과(Family), 4열(E)=이름(Name)
+            # data.csv 구조 가정: 2열(C)=과(Family), 4열(E)=이름(Name)
             df = pd.read_csv(file_path, skiprows=2, encoding=enc)
             
-            # 필요한 컬럼만 추출
             bird_data = df.iloc[:, [2, 4]].dropna() 
             bird_data.columns = ['family', 'name']
             
@@ -111,16 +123,20 @@ def load_bird_map():
             bird_list = bird_data['name'].tolist()
             name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
             
-            # 2. 이름 -> 과 매핑 (통계용)
+            # 2. 이름 -> 과 매핑 (나의 수집 통계용)
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
             
-            return name_to_no, name_to_family
+            # 3. 과 -> 전체 마리수 매핑 (전체 통계용)
+            # 예: {'오리과': 15, '백로과': 8, ...}
+            family_total_counts = bird_data['family'].value_counts().to_dict()
+            
+            return name_to_no, name_to_family, family_total_counts
         except: continue
         
-    return {}, {}
+    return {}, {}, {}
 
-# 매핑 데이터 로드
-BIRD_MAP, FAMILY_MAP = load_bird_map()
+# 매핑 데이터 로드 (리턴값 3개)
+BIRD_MAP, FAMILY_MAP, FAMILY_TOTAL_COUNTS = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
@@ -185,29 +201,44 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [사이드바 구현] 과별 수집 현황
+# ⭐️ [사이드바 구현] 과별 수집 현황 (텍스트 리스트 형태)
 with st.sidebar:
     st.header("📊 과별 수집 현황")
-    st.write("내가 모은 새들을 '과(Family)'별로 확인해보세요!")
+    st.caption("전체 도감 대비 내가 모은 새 (수집/전체)")
+    st.divider()
     
-    if not df.empty and FAMILY_MAP:
-        # 수집된 새 이름에 해당하는 '과' 정보를 매핑
-        df['family'] = df['bird_name'].map(FAMILY_MAP)
+    if FAMILY_TOTAL_COUNTS: # 족보 데이터가 있을 때만 표시
+        # 내 수집 현황 계산
+        my_family_counts = {}
+        if not df.empty and FAMILY_MAP:
+            df['family'] = df['bird_name'].map(FAMILY_MAP)
+            my_family_counts = df['family'].value_counts().to_dict()
         
-        # 과별 개수 집계
-        family_counts = df['family'].value_counts()
+        # 가나다 순으로 정렬하여 출력
+        sorted_families = sorted(FAMILY_TOTAL_COUNTS.keys())
         
-        # 데이터프레임으로 깔끔하게 표시
-        st.dataframe(
-            family_counts, 
-            use_container_width=True, 
-            column_config={"family": "과 이름", "count": "마리"}
-        )
+        for family in sorted_families:
+            total = FAMILY_TOTAL_COUNTS[family]
+            count = my_family_counts.get(family, 0)
+            
+            # 수집된 게 있으면 진하게 표시, 없으면 연하게
+            if count > 0:
+                row_style = "color:#111; font-weight:600;"
+                count_style = "color:#2e7d32;"
+            else:
+                row_style = "color:#999;"
+                count_style = "color:#999;"
+
+            st.markdown(f"""
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dotted #eee; {row_style}">
+                <span>{family}</span>
+                <span style="{count_style}">{count} / {total}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
     else:
-        if df.empty:
-            st.info("아직 수집된 새가 없습니다.")
-        elif not FAMILY_MAP:
-            st.warning("족보 파일에서 '과' 정보를 찾지 못했습니다.")
+        st.warning("⚠️ data.csv 파일을 읽지 못했거나 '과' 정보가 없습니다.")
+
 
 # 메인 요약 박스
 st.markdown(f"""
