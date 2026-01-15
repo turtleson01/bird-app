@@ -5,7 +5,6 @@ import google.generativeai as genai
 from PIL import Image
 from datetime import datetime
 import os
-# time import 제거함 (대기 기능 삭제)
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
@@ -77,7 +76,7 @@ hide_streamlit_style = """
                 font-weight: 700;
             }
             
-            /* 파일 업로더 버튼 숨기기 */
+            /* 파일 업로더 버튼 숨기기 (X버튼은 살림) */
             [data-testid="stFileUploaderDropzone"] button { display: none !important; }
             [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
 
@@ -119,29 +118,6 @@ except:
 
 # --- [2. 데이터 및 족보 관리] ---
 
-# 영문 과명 -> 한글 과명 자동 변환 사전
-FAMILY_KO_DICT = {
-    "Accipitridae": "수리과", "Acrocephalidae": "개개비과", "Aegithalidae": "오목눈이과",
-    "Alaudidae": "종다리과", "Alcedinidae": "물총새과", "Anatidae": "오리과",
-    "Apodidae": "칼새과", "Ardeidae": "백로과", "Artamidae": "숲제비과",
-    "Bombycillidae": "여새과", "Caprimulgidae": "쏙독새과", "Charadriidae": "물떼새과",
-    "Ciconiidae": "황새과", "Cinclidae": "물까마귀과", "Columbidae": "비둘기과",
-    "Corvidae": "까마귀과", "Cuculidae": "두견과", "Emberizidae": "멧새과",
-    "Falconidae": "매과", "Fringillidae": "되새과", "Gaviidae": "아비과",
-    "Gruidae": "두루미과", "Hirundinidae": "제비과", "Laniidae": "때까치과",
-    "Laridae": "갈매기과", "Leiothrichidae": "조자이꼬리치레과", "Locustellidae": "섬개개비과",
-    "Motacillidae": "할미새과", "Muscicapidae": "솔딱새과", "Oriolidae": "꾀꼬리과",
-    "Paridae": "박새과", "Passeridae": "참새과", "Phalacrocoracidae": "가마우지과",
-    "Phasianidae": "꿩과", "Phylloscopidae": "솔새과", "Picidae": "딱따구리과",
-    "Podicipedidae": "논병아리과", "Procellariidae": "슴새과", "Prunellidae": "바위종다리과",
-    "Pycnonotidae": "직박구리과", "Rallidae": "뜸부기과", "Recurvirostridae": "장다리물떼새과",
-    "Regulidae": "상모솔새과", "Remizidae": "스윈호오목눈이과", "Scolopacidae": "도요과",
-    "Sittidae": "동고비과", "Strigidae": "올빼미과", "Sturnidae": "찌르레기과",
-    "Sulidae": "얼가니새과", "Sylviidae": "비단털쥐발귀과", "Threskiornithidae": "저어새과",
-    "Timaliidae": "꼬리치레과", "Troglodytidae": "굴뚝새과", "Turdidae": "지빠귀과",
-    "Upupidae": "후투티과", "Zosteropidae": "동박새과"
-}
-
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -150,7 +126,6 @@ def load_bird_map():
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # 헤더 없이 읽고 4열(이름), 14열(과) 추출
             df = pd.read_csv(file_path, skiprows=2, header=None, encoding=enc)
             
             if df.shape[1] < 15: continue
@@ -165,10 +140,8 @@ def load_bird_map():
             filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
-            # 중복 제거 없이 전체 사용 (602종)
             total_species_count = len(bird_data)
 
-            # 매핑 데이터 생성
             bird_list = bird_data['name'].tolist()
             name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
@@ -185,6 +158,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
     try:
+        # ttl=0은 유지하되, 이 함수는 '화면 갱신' 용도로만 씁니다.
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         if df.empty: return pd.DataFrame(columns=['No', 'bird_name', 'date'])
         if BIRD_MAP and 'bird_name' in df.columns:
@@ -193,26 +167,34 @@ def get_data():
         return df
     except: return pd.DataFrame(columns=['No', 'bird_name', 'date'])
 
-def save_data(bird_name):
+# ⭐️ [속도 최적화] save_data가 현재 로드된 df를 인자로 받습니다.
+# 다시 get_data()를 호출하지 않아 인터넷 통신을 1회 줄입니다.
+def save_data(bird_name, current_df):
     bird_name = bird_name.strip()
+    
+    # 1. 족보 체크 (로컬)
     if bird_name not in BIRD_MAP:
-        # ⭐️ [수정] 멘트 변경: 족보 -> 도감 목록
         return f"⚠️ '{bird_name}'은(는) 도감 목록에 없는 이름입니다."
+        
+    # 2. 중복 체크 (로컬 데이터프레임 이용)
+    if not current_df.empty and bird_name in current_df['bird_name'].values:
+        return "이미 등록된 새입니다."
+        
     try:
-        df = get_data()
-        if bird_name in df['bird_name'].values: return "이미 등록된 새입니다."
+        # 3. 저장 (쓰기만 수행)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         real_no = BIRD_MAP.get(bird_name)
         new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'date': [now]})
-        updated_df = pd.concat([df, new_row], ignore_index=True)
+        
+        # 기존 df에 붙여서 통째로 업데이트
+        updated_df = pd.concat([current_df, new_row], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
     except Exception as e: return str(e)
 
-def delete_birds(bird_names_to_delete):
+def delete_birds(bird_names_to_delete, current_df):
     try:
-        df = get_data()
-        df = df[~df['bird_name'].isin(bird_names_to_delete)]
+        df = current_df[~current_df['bird_name'].isin(bird_names_to_delete)]
         conn.update(spreadsheet=SHEET_URL, data=df)
         return True
     except Exception as e: return str(e)
@@ -240,6 +222,7 @@ def analyze_bird_image(image, user_doubt=None):
 # --- [4. 메인 화면] ---
 st.title("🦅 나의 탐조 도감")
 
+# ⭐️ 메인 데이터 로드 (여기서 한 번만 읽어오고, save_data에 넘겨줍니다)
 df = get_data()
 
 # 사이드바
@@ -294,21 +277,20 @@ tab1, tab2, tab3 = st.tabs(["✍️ 직접 입력", "📸 AI 분석", "🛠️ �
 
 with tab1:
     st.subheader("새 이름 직접 기록")
-    # ⭐️ [핵심] 연속 입력 최적화 함수
     def add_manual():
         # 1. 입력값 가져오기
         name = st.session_state.input_bird.strip()
-        
-        # 2. 입력창 즉시 비우기 (어떤 결과든 상관없이)
+        # 2. 입력창 즉시 비우기
         st.session_state.input_bird = ""
         
-        # 3. 로직 처리
         if name:
-            res = save_data(name)
+            # ⭐️ [핵심] 현재 로드된 df를 인자로 넘겨서 '읽기' 과정을 생략
+            res = save_data(name, df)
             if res is True: 
                 st.toast(f"✅ {name} 등록 완료!")
+                # 성공 시 페이지 리로드 (데이터 갱신)
+                # 약간의 딜레이가 있더라도 입력창은 이미 비워졌으므로 사용자는 다음 입력 가능
             else: 
-                # 실패 메시지도 Toast로 띄워서 입력 흐름 방해 안 함
                 st.toast(f"🚫 {res}")
                 
     st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
@@ -352,11 +334,12 @@ with tab2:
                         st.markdown(f"**🔍 판단 이유**")
                         st.info(reason)
                         if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
-                            res = save_data(bird_name)
+                            # AI 분석에서도 df 넘겨주기
+                            res = save_data(bird_name, df)
                             if res is True: 
                                 st.balloons()
                                 st.toast(f"🎉 {bird_name} 등록 성공!")
-                                st.rerun() # AI 분석에서는 성공 시 바로 반영되는 게 좋음
+                                st.rerun()
                             else: st.error(res)
                     else:
                         st.warning(f"⚠️ **{bird_name}**")
@@ -377,7 +360,8 @@ with tab3:
         to_delete = st.multiselect("삭제할 기록 선택", options=df['bird_name'].tolist(), placeholder="도감에서 삭제할 새 이름을 입력하세요")
         if to_delete:
             if st.button(f"🗑️ 선택한 {len(to_delete)}개 삭제하기", type="primary"):
-                if delete_birds(to_delete) is True:
+                # 삭제 함수에도 df 넘겨주기
+                if delete_birds(to_delete, df) is True:
                     st.success("삭제되었습니다."); st.rerun()
     else: st.info("등록된 기록이 없습니다.")
 
