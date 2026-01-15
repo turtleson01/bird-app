@@ -5,7 +5,6 @@ import google.generativeai as genai
 from PIL import Image
 from datetime import datetime
 import os
-import time  # ⭐️ [추가] 알림을 보여줄 시간을 벌기 위해 필요합니다.
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
@@ -127,17 +126,28 @@ def load_bird_map():
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
+            # ⭐️ [핵심 수정] 14번째 열(O열)을 직접 조준해서 읽습니다.
+            # skiprows=2: 헤더가 2줄이므로 데이터가 시작되는 3번째 줄부터 읽기 위해
+            # header=None: 컬럼 이름을 자동으로 잡지 않고 인덱스(0, 1, 2...)로 쓰기 위해
+            
             df = pd.read_csv(file_path, skiprows=2, header=None, encoding=enc)
             
+            # 컬럼 개수가 충분한지 확인 (적어도 15개 이상이어야 함)
             if df.shape[1] < 15: continue
 
+            # 4번 열(Index 4): 대표국명 (새 이름)
+            # 14번 열(Index 14): Family 국명 (과 이름 - 한글)
             bird_data = df.iloc[:, [4, 14]].copy()
             bird_data.columns = ['name', 'family']
             
+            # 결측치 제거
             bird_data = bird_data.dropna()
+            
+            # 데이터 정제 (공백 제거)
             bird_data['name'] = bird_data['name'].astype(str).str.strip()
             bird_data['family'] = bird_data['family'].astype(str).str.strip()
             
+            # 혹시 모를 헤더 찌꺼기 제거
             filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
@@ -217,7 +227,7 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [사이드바] 카드형 과별 수집 현황 (한글 데이터)
+# ⭐️ [사이드바] 과별 수집 현황 (한글 데이터 직접 사용)
 with st.sidebar:
     st.header("📊 과별 수집 현황")
     st.caption("전체 도감 대비 내가 모은 새")
@@ -251,6 +261,7 @@ with st.sidebar:
 
 # 메인 요약 박스 + 진행바
 total_collected = len(df)
+# 전체 종 수 (엑셀 행 개수)
 total_species = TOTAL_SPECIES_COUNT if TOTAL_SPECIES_COUNT > 0 else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
 
@@ -274,9 +285,7 @@ with tab1:
         if name:
             res = save_data(name)
             if res is True: 
-                # ⭐️ [수정] 직접 입력도 알림 보일 시간 확보
                 st.toast(f"✅ {name} 등록 완료!")
-                time.sleep(1.5)
                 st.session_state.input_bird = ""
             else: st.error(res)
     st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
@@ -324,8 +333,6 @@ with tab2:
                             if res is True: 
                                 st.balloons()
                                 st.toast(f"🎉 {bird_name} 등록 성공!")
-                                # ⭐️ [수정] 여기서 시간을 끌어줍니다 (2초)
-                                time.sleep(2)
                                 st.rerun()
                             else: st.error(res)
                     else:
@@ -348,9 +355,7 @@ with tab3:
         if to_delete:
             if st.button(f"🗑️ 선택한 {len(to_delete)}개 삭제하기", type="primary"):
                 if delete_birds(to_delete) is True:
-                    st.success("삭제되었습니다.")
-                    time.sleep(1.0) # 삭제 시에도 살짝 대기
-                    st.rerun()
+                    st.success("삭제되었습니다."); st.rerun()
     else: st.info("등록된 기록이 없습니다.")
 
 st.divider()
