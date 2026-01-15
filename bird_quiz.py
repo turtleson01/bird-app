@@ -6,17 +6,17 @@ from PIL import Image
 from datetime import datetime
 import os
 
-# --- [1. Basic Configuration] ---
+# --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: Design Settings
+# CSS: 디자인 설정
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* Summary Box */
+            /* 요약 박스 */
             .summary-box {
                 padding: 20px; 
                 border-radius: 15px; 
@@ -28,7 +28,7 @@ hide_streamlit_style = """
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* Progress Bar */
+            /* 진행바 */
             .progress-container {
                 width: 100%;
                 background-color: #f1f3f5;
@@ -44,7 +44,7 @@ hide_streamlit_style = """
                 transition: width 0.5s ease-in-out;
             }
             
-            /* Sidebar Card */
+            /* 사이드바 카드 */
             .sidebar-card {
                 background-color: white;
                 border: 1px solid #e0e0e0;
@@ -76,13 +76,15 @@ hide_streamlit_style = """
                 font-weight: 700;
             }
             
-            /* UI Elements Hidden */
+            /* 파일 업로더 버튼 숨기기 (X버튼은 살림) */
             [data-testid="stFileUploaderDropzone"] button { display: none !important; }
             [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
+
+            /* 목록 스타일 */
             .bird-item { font-size: 1.1rem; padding: 12px 5px; font-weight: 500; color: #333; }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
-            /* Buttons */
+            /* 버튼 스타일 */
             div.stButton > button[kind="primary"] {
                 background: linear-gradient(45deg, #64B5F6, #90CAF9); 
                 color: white !important;
@@ -114,56 +116,98 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. Data & Family Tree Management] ---
+# --- [2. 데이터 및 족보 관리] ---
+
+# ⭐️ [핵심] 영문 과명 -> 한글 과명 자동 변환 사전
+FAMILY_KO_DICT = {
+    "Accipitridae": "수리과", "Acrocephalidae": "개개비과", "Aegithalidae": "오목눈이과",
+    "Alaudidae": "종다리과", "Alcedinidae": "물총새과", "Anatidae": "오리과",
+    "Apodidae": "칼새과", "Ardeidae": "백로과", "Artamidae": "숲제비과",
+    "Bombycillidae": "여새과", "Caprimulgidae": "쏙독새과", "Charadriidae": "물떼새과",
+    "Ciconiidae": "황새과", "Cinclidae": "물까마귀과", "Columbidae": "비둘기과",
+    "Corvidae": "까마귀과", "Cuculidae": "두견과", "Emberizidae": "멧새과",
+    "Falconidae": "매과", "Fringillidae": "되새과", "Gaviidae": "아비과",
+    "Gruidae": "두루미과", "Hirundinidae": "제비과", "Laniidae": "때까치과",
+    "Laridae": "갈매기과", "Leiothrichidae": "조자이꼬리치레과", "Locustellidae": "섬개개비과",
+    "Motacillidae": "할미새과", "Muscicapidae": "솔딱새과", "Oriolidae": "꾀꼬리과",
+    "Paridae": "박새과", "Passeridae": "참새과", "Phalacrocoracidae": "가마우지과",
+    "Phasianidae": "꿩과", "Phylloscopidae": "솔새과", "Picidae": "딱따구리과",
+    "Podicipedidae": "논병아리과", "Procellariidae": "슴새과", "Prunellidae": "바위종다리과",
+    "Pycnonotidae": "직박구리과", "Rallidae": "뜸부기과", "Recurvirostridae": "장다리물떼새과",
+    "Regulidae": "상모솔새과", "Remizidae": "스윈호오목눈이과", "Scolopacidae": "도요과",
+    "Sittidae": "동고비과", "Strigidae": "올빼미과", "Sturnidae": "찌르레기과",
+    "Sulidae": "얼가니새과", "Sylviidae": "비단털쥐발귀과", "Threskiornithidae": "저어새과",
+    "Timaliidae": "꼬리치레과", "Troglodytidae": "굴뚝새과", "Turdidae": "지빠귀과",
+    "Upupidae": "후투티과", "Zosteropidae": "동박새과"
+}
 
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
-    if not os.path.exists(file_path): return {}, {}, {}
+    if not os.path.exists(file_path): return {}, {}, 0, {}
     
-    # Try different encodings
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # Read the full file first
-            df = pd.read_csv(file_path, encoding=enc)
+            # 1. 헤더 위치 자동 탐색
+            header_row_idx = 0
+            with open(file_path, 'r', encoding=enc) as f:
+                lines = [f.readline() for _ in range(10)]
+                for i, line in enumerate(lines):
+                    line_lower = line.lower()
+                    if (('family' in line_lower or '과' in line_lower) and 
+                        ('name' in line_lower or '국명' in line_lower)):
+                        header_row_idx = i
+                        break
             
-            # ⭐️ Precise Column Targeting
-            # Your data.csv has a sub-header at index 0. Actual data starts at index 1.
-            # Column 4 (Index 4): '대표국명' (Bird Name)
-            # Column 14 (Index 14): 'Unnamed: 14' (Korean Family Name)
+            df = pd.read_csv(file_path, header=header_row_idx, encoding=enc)
             
-            # Check if columns are sufficient
-            if df.shape[1] < 15:
-                continue
-
-            # Skip the first row (sub-header) and select specific columns
-            # We select all rows from index 1 onwards
-            bird_data = df.iloc[1:, [4, 14]].copy()
-            bird_data.columns = ['name', 'family']
+            def find_col_name(cols, keywords):
+                for col in cols:
+                    for kw in keywords:
+                        if kw in str(col).lower(): return col
+                return None
             
-            # Clean Data
-            bird_data = bird_data.dropna() # Remove empty rows
+            # 우선순위: 한글 헤더 > 영문 헤더
+            family_col = find_col_name(df.columns, ['과', '과명', 'family', 'familia'])
+            name_col = find_col_name(df.columns, ['name', '국명', '이름', 'ko_name'])
+            
+            # 헤더 못 찾으면 인덱스로 접근 (C열=2, E열=4)
+            if not family_col or not name_col:
+                if df.shape[1] >= 5:
+                    bird_data = df.iloc[:, [2, 4]]
+                else: continue
+            else:
+                bird_data = df[[family_col, name_col]]
+                
+            bird_data.columns = ['family', 'name']
+            bird_data = bird_data.dropna()
+            
             bird_data['name'] = bird_data['name'].astype(str).str.strip()
             bird_data['family'] = bird_data['family'].astype(str).str.strip()
             
-            # Remove potential header artifacts if any slipped through
-            filter_keywords = ['국명', 'Name', 'Family', '과']
-            bird_data = bird_data[~bird_data['name'].isin(filter_keywords)]
+            # 이상한 데이터 필터링
+            filter_keywords = ['과', 'Family', '이명', '정명']
+            bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
-            # Generate Maps
+            # ⭐️ [한글 변환] 영문 과명을 한글로 변환
+            bird_data['family'] = bird_data['family'].apply(lambda x: FAMILY_KO_DICT.get(x, x))
+
+            # ⭐️ [수정] 중복 포함 전체 개수 계산 (엑셀 줄 수 기준)
+            total_rows_count = len(bird_data)
+
+            # 매핑 데이터 생성
             bird_list = bird_data['name'].tolist()
-            name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
+            name_to_no = {name: i + 1 for i, name in enumerate(bird_list)} # 중복 이름은 마지막 번호로 매핑됨
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
             family_total_counts = bird_data['family'].value_counts().to_dict()
             
-            return name_to_no, name_to_family, family_total_counts
-        except Exception as e:
-            continue
+            return name_to_no, name_to_family, total_rows_count, family_total_counts
+        except: continue
         
-    return {}, {}, {}
+    return {}, {}, 0, {}
 
-BIRD_MAP, FAMILY_MAP, FAMILY_TOTAL_COUNTS = load_bird_map()
+BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
@@ -179,7 +223,7 @@ def get_data():
 def save_data(bird_name):
     bird_name = bird_name.strip()
     if bird_name not in BIRD_MAP:
-        return f"⚠️ '{bird_name}'은(는) 도감 목록(data.csv)에 없는 이름입니다."
+        return f"⚠️ '{bird_name}'은(는) 족보에 없는 이름입니다."
     try:
         df = get_data()
         if bird_name in df['bird_name'].values: return "이미 등록된 새입니다."
@@ -199,7 +243,7 @@ def delete_birds(bird_names_to_delete):
         return True
     except Exception as e: return str(e)
 
-# --- [3. AI Analysis] ---
+# --- [3. AI 분석] ---
 def analyze_bird_image(image, user_doubt=None):
     try:
         genai.configure(api_key=API_KEY)
@@ -219,12 +263,12 @@ def analyze_bird_image(image, user_doubt=None):
         return response.text.strip()
     except: return "Error | 분석 오류"
 
-# --- [4. Main Screen] ---
+# --- [4. 메인 화면] ---
 st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [Sidebar] Family Collection Status (Korean)
+# ⭐️ [사이드바] 카드형 과별 수집 현황 (한글)
 with st.sidebar:
     st.header("📊 과별 수집 현황")
     st.caption("전체 도감 대비 내가 모은 새")
@@ -233,7 +277,7 @@ with st.sidebar:
     if FAMILY_TOTAL_COUNTS:
         my_family_counts = {}
         if not df.empty and FAMILY_MAP:
-            # Map collected birds to their families (using loaded Korean families)
+            # 내 데이터의 과 정보도 한글 매핑 적용
             df['family'] = df['bird_name'].map(FAMILY_MAP)
             my_family_counts = df['family'].value_counts().to_dict()
         
@@ -255,12 +299,12 @@ with st.sidebar:
             """, unsafe_allow_html=True)
             
     else:
-        st.warning("⚠️ 족보 파일(data.csv)을 읽는 중 문제가 발생했습니다. 파일 형식을 확인해주세요.")
+        st.warning("⚠️ 족보 파일(data.csv)에서 '과(Family)' 정보를 읽지 못했습니다.")
 
-# Summary Box + Progress Bar
+# ⭐️ 메인 요약 박스 + 진행바 (전체 개수 수정됨)
 total_collected = len(df)
-# Ensure total species is at least 1 to avoid division by zero
-total_species = len(BIRD_MAP) if BIRD_MAP else 602 
+# TOTAL_SPECIES_COUNT는 이제 중복을 포함한 엑셀 전체 줄 수(602)입니다.
+total_species = TOTAL_SPECIES_COUNT if TOTAL_SPECIES_COUNT > 0 else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
 
 st.markdown(f"""
