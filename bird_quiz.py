@@ -126,17 +126,17 @@ def load_bird_map():
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # ⭐️ [핵심 수정] 헤더나 번역기 없이, 파일의 위치(Index)로 정확하게 데이터를 찝어냅니다.
-            # 4번 열(E): 대표국명 (새 이름)
-            # 14번 열(O): Family 국명 (과 이름 - 한글)
+            # ⭐️ [핵심 수정] 14번째 열(O열)을 직접 조준해서 읽습니다.
+            # skiprows=2: 헤더가 2줄이므로 데이터가 시작되는 3번째 줄부터 읽기 위해
+            # header=None: 컬럼 이름을 자동으로 잡지 않고 인덱스(0, 1, 2...)로 쓰기 위해
             
-            # header=None으로 읽어서 모든 줄을 데이터로 가져옵니다.
-            df = pd.read_csv(file_path, header=None, encoding=enc)
+            df = pd.read_csv(file_path, skiprows=2, header=None, encoding=enc)
             
-            # 컬럼 개수가 충분한지 확인
+            # 컬럼 개수가 충분한지 확인 (적어도 15개 이상이어야 함)
             if df.shape[1] < 15: continue
 
-            # 4번 열과 14번 열만 추출
+            # 4번 열(Index 4): 대표국명 (새 이름)
+            # 14번 열(Index 14): Family 국명 (과 이름 - 한글)
             bird_data = df.iloc[:, [4, 14]].copy()
             bird_data.columns = ['name', 'family']
             
@@ -147,10 +147,8 @@ def load_bird_map():
             bird_data['name'] = bird_data['name'].astype(str).str.strip()
             bird_data['family'] = bird_data['family'].astype(str).str.strip()
             
-            # ⭐️ [필터링] 엑셀의 제목 줄(대표국명, 국명, NaN 등) 제거
-            filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과', 'nan']
-            # 이름이나 과 이름이 저 키워드에 포함되면 데이터가 아니므로 제외
-            bird_data = bird_data[~bird_data['name'].isin(filter_keywords)]
+            # 혹시 모를 헤더 찌꺼기 제거
+            filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
             # 전체 종 수 (중복 포함 엑셀 줄 수)
@@ -229,7 +227,7 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [사이드바] 카드형 과별 수집 현황 (파일 원본 한글 사용)
+# ⭐️ [사이드바] 과별 수집 현황 (한글 데이터 직접 사용)
 with st.sidebar:
     st.header("📊 과별 수집 현황")
     st.caption("전체 도감 대비 내가 모은 새")
@@ -259,10 +257,11 @@ with st.sidebar:
             """, unsafe_allow_html=True)
             
     else:
-        st.warning("⚠️ 족보 파일(data.csv) 형식을 확인해주세요.")
+        st.warning("⚠️ 족보 파일(data.csv)을 읽는 중 문제가 발생했습니다.")
 
-# ⭐️ 메인 요약 박스 + 진행바
+# 메인 요약 박스 + 진행바
 total_collected = len(df)
+# 전체 종 수 (엑셀 행 개수)
 total_species = TOTAL_SPECIES_COUNT if TOTAL_SPECIES_COUNT > 0 else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
 
