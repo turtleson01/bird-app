@@ -9,26 +9,26 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 설정 (카드형 사이드바, 진행바, 심플 박스)
+# CSS: 디자인 설정
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 1. 도감 요약 박스 (테두리 없음, 깔끔) */
+            /* 요약 박스 */
             .summary-box {
                 padding: 20px; 
                 border-radius: 15px; 
                 background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-                margin-bottom: 10px; /* 아래 진행바와의 간격 */
+                margin-bottom: 10px;
                 box-shadow: 0 4px 6px rgba(0,0,0,0.05);
                 text-align: left;
             }
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* 2. 연두색 진행바 컨테이너 */
+            /* 진행바 */
             .progress-container {
                 width: 100%;
                 background-color: #f1f3f5;
@@ -39,12 +39,12 @@ hide_streamlit_style = """
             }
             .progress-bar {
                 height: 100%;
-                background-color: #66bb6a; /* 연두색 */
+                background-color: #66bb6a;
                 border-radius: 10px;
                 transition: width 0.5s ease-in-out;
             }
             
-            /* 3. 사이드바 카드 스타일 */
+            /* 사이드바 카드 */
             .sidebar-card {
                 background-color: white;
                 border: 1px solid #e0e0e0;
@@ -76,11 +76,9 @@ hide_streamlit_style = """
                 font-weight: 700;
             }
             
-            /* 파일 업로더 'Browse files' 버튼 숨기기 (X버튼은 살림) */
+            /* 기타 UI 숨김 및 스타일 */
             [data-testid="stFileUploaderDropzone"] button { display: none !important; }
             [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
-
-            /* 목록 스타일 */
             .bird-item { font-size: 1.1rem; padding: 12px 5px; font-weight: 500; color: #333; }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
@@ -101,8 +99,6 @@ hide_streamlit_style = """
                 border: 1px solid #ffcccc;
                 border-radius: 8px;
             }
-            
-            /* 사이드바 배경 */
             [data-testid="stSidebar"] {
                 background-color: #fafafa;
                 border-right: 1px solid #eee;
@@ -118,7 +114,32 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 데이터 및 족보 관리 (스마트 로더)] ---
+# --- [2. 데이터 및 족보 관리] ---
+
+# ⭐️ [핵심] 영문 과명 -> 한글 과명 번역 사전
+# 데이터 파일에 한글 '과'가 없어도 이걸로 자동 변환합니다.
+FAMILY_KO_DICT = {
+    "Accipitridae": "수리과", "Acrocephalidae": "개개비과", "Aegithalidae": "오목눈이과",
+    "Alaudidae": "종다리과", "Alcedinidae": "물총새과", "Anatidae": "오리과",
+    "Apodidae": "칼새과", "Ardeidae": "백로과", "Artamidae": "숲제비과",
+    "Bombycillidae": "여새과", "Caprimulgidae": "쏙독새과", "Charadriidae": "물떼새과",
+    "Ciconiidae": "황새과", "Cinclidae": "물까마귀과", "Columbidae": "비둘기과",
+    "Corvidae": "까마귀과", "Cuculidae": "두견과", "Emberizidae": "멧새과",
+    "Falconidae": "매과", "Fringillidae": "되새과", "Gaviidae": "아비과",
+    "Gruidae": "두루미과", "Hirundinidae": "제비과", "Laniidae": "때까치과",
+    "Laridae": "갈매기과", "Leiothrichidae": "조자이꼬리치레과", "Locustellidae": "섬개개비과",
+    "Motacillidae": "할미새과", "Muscicapidae": "솔딱새과", "Oriolidae": "꾀꼬리과",
+    "Paridae": "박새과", "Passeridae": "참새과", "Phalacrocoracidae": "가마우지과",
+    "Phasianidae": "꿩과", "Phylloscopidae": "솔새과", "Picidae": "딱따구리과",
+    "Podicipedidae": "논병아리과", "Procellariidae": "슴새과", "Prunellidae": "바위종다리과",
+    "Pycnonotidae": "직박구리과", "Rallidae": "뜸부기과", "Recurvirostridae": "장다리물떼새과",
+    "Regulidae": "상모솔새과", "Remizidae": "스윈호오목눈이과", "Scolopacidae": "도요과",
+    "Sittidae": "동고비과", "Strigidae": "올빼미과", "Sturnidae": "찌르레기과",
+    "Sulidae": "얼가니새과", "Sylviidae": "비단털쥐발귀과", "Threskiornithidae": "저어새과",
+    "Timaliidae": "꼬리치레과", "Troglodytidae": "굴뚝새과", "Turdidae": "지빠귀과",
+    "Upupidae": "후투티과", "Zosteropidae": "동박새과"
+}
+
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -127,7 +148,7 @@ def load_bird_map():
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # 1. 헤더 위치 자동 탐색 (Family나 Name이 있는 줄 찾기)
+            # 1. 헤더 위치 자동 탐색
             header_row_idx = 0
             with open(file_path, 'r', encoding=enc) as f:
                 lines = [f.readline() for _ in range(10)]
@@ -138,20 +159,18 @@ def load_bird_map():
                         header_row_idx = i
                         break
             
-            # 2. 찾은 위치로 데이터 읽기
             df = pd.read_csv(file_path, header=header_row_idx, encoding=enc)
             
-            # 3. 컬럼 이름 유연하게 찾기
             def find_col_name(cols, keywords):
                 for col in cols:
                     for kw in keywords:
                         if kw in str(col).lower(): return col
                 return None
-                
-            family_col = find_col_name(df.columns, ['family', '과', 'familia'])
+            
+            # ⭐️ [수정] 한글 '과'를 영문 'family'보다 먼저 찾도록 우선순위 변경
+            family_col = find_col_name(df.columns, ['과', '과명', 'family', 'familia'])
             name_col = find_col_name(df.columns, ['name', '국명', '이름', 'ko_name'])
             
-            # 4. 컬럼을 못 찾으면 인덱스(위치)로 시도 (C열=2, E열=4)
             if not family_col or not name_col:
                 if df.shape[1] >= 5:
                     bird_data = df.iloc[:, [2, 4]]
@@ -162,15 +181,15 @@ def load_bird_map():
             bird_data.columns = ['family', 'name']
             bird_data = bird_data.dropna()
             
-            # 데이터 정제
             bird_data['name'] = bird_data['name'].astype(str).str.strip()
             bird_data['family'] = bird_data['family'].astype(str).str.strip()
             
-            # 헤더가 데이터로 들어간 경우 제거
             filter_keywords = ['과', 'Family', '이명', '정명']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
-            # 매핑 데이터 생성
+            # ⭐️ [핵심] 영문 Family를 한글로 번역 (사전에 있으면 변환, 없으면 그대로)
+            bird_data['family'] = bird_data['family'].apply(lambda x: FAMILY_KO_DICT.get(x, x))
+
             bird_list = bird_data['name'].tolist()
             name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
@@ -242,7 +261,7 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [사이드바] 카드형 과별 수집 현황
+# ⭐️ [사이드바] 카드형 과별 수집 현황 (한글화 적용됨)
 with st.sidebar:
     st.header("📊 과별 수집 현황")
     st.caption("전체 도감 대비 내가 모은 새")
@@ -251,19 +270,19 @@ with st.sidebar:
     if FAMILY_TOTAL_COUNTS:
         my_family_counts = {}
         if not df.empty and FAMILY_MAP:
+            # 내 데이터의 과 정보도 한글 매핑 적용
             df['family'] = df['bird_name'].map(FAMILY_MAP)
             my_family_counts = df['family'].value_counts().to_dict()
         
+        # 가나다순 정렬 (한글로 변환되었으므로 한글 기준 정렬됨)
         sorted_families = sorted(FAMILY_TOTAL_COUNTS.keys())
         
         for family in sorted_families:
             total = FAMILY_TOTAL_COUNTS[family]
             count = my_family_counts.get(family, 0)
             
-            # 수집한 과는 강조
             highlight_class = "stat-highlight" if count > 0 else ""
             
-            # 카드 디자인 렌더링
             st.markdown(f"""
             <div class="sidebar-card">
                 <div class="card-title">{family}</div>
@@ -274,9 +293,9 @@ with st.sidebar:
             """, unsafe_allow_html=True)
             
     else:
-        st.warning("⚠️ 족보 파일(data.csv)에서 '과(Family)' 정보를 읽지 못했습니다. 파일 형식을 확인해주세요.")
+        st.warning("⚠️ 족보 파일(data.csv)에서 '과(Family)' 정보를 읽지 못했습니다.")
 
-# ⭐️ 메인 요약 박스 + 연두색 진행바
+# 메인 요약 박스 + 진행바
 total_collected = len(df)
 total_species = len(BIRD_MAP) if BIRD_MAP else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
