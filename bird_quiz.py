@@ -5,6 +5,7 @@ import google.generativeai as genai
 from PIL import Image
 from datetime import datetime
 import os
+# time import 제거함 (대기 기능 삭제)
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
@@ -76,7 +77,7 @@ hide_streamlit_style = """
                 font-weight: 700;
             }
             
-            /* 파일 업로더 버튼 숨기기 (X버튼은 살림) */
+            /* 파일 업로더 버튼 숨기기 */
             [data-testid="stFileUploaderDropzone"] button { display: none !important; }
             [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
 
@@ -118,6 +119,29 @@ except:
 
 # --- [2. 데이터 및 족보 관리] ---
 
+# 영문 과명 -> 한글 과명 자동 변환 사전
+FAMILY_KO_DICT = {
+    "Accipitridae": "수리과", "Acrocephalidae": "개개비과", "Aegithalidae": "오목눈이과",
+    "Alaudidae": "종다리과", "Alcedinidae": "물총새과", "Anatidae": "오리과",
+    "Apodidae": "칼새과", "Ardeidae": "백로과", "Artamidae": "숲제비과",
+    "Bombycillidae": "여새과", "Caprimulgidae": "쏙독새과", "Charadriidae": "물떼새과",
+    "Ciconiidae": "황새과", "Cinclidae": "물까마귀과", "Columbidae": "비둘기과",
+    "Corvidae": "까마귀과", "Cuculidae": "두견과", "Emberizidae": "멧새과",
+    "Falconidae": "매과", "Fringillidae": "되새과", "Gaviidae": "아비과",
+    "Gruidae": "두루미과", "Hirundinidae": "제비과", "Laniidae": "때까치과",
+    "Laridae": "갈매기과", "Leiothrichidae": "조자이꼬리치레과", "Locustellidae": "섬개개비과",
+    "Motacillidae": "할미새과", "Muscicapidae": "솔딱새과", "Oriolidae": "꾀꼬리과",
+    "Paridae": "박새과", "Passeridae": "참새과", "Phalacrocoracidae": "가마우지과",
+    "Phasianidae": "꿩과", "Phylloscopidae": "솔새과", "Picidae": "딱따구리과",
+    "Podicipedidae": "논병아리과", "Procellariidae": "슴새과", "Prunellidae": "바위종다리과",
+    "Pycnonotidae": "직박구리과", "Rallidae": "뜸부기과", "Recurvirostridae": "장다리물떼새과",
+    "Regulidae": "상모솔새과", "Remizidae": "스윈호오목눈이과", "Scolopacidae": "도요과",
+    "Sittidae": "동고비과", "Strigidae": "올빼미과", "Sturnidae": "찌르레기과",
+    "Sulidae": "얼가니새과", "Sylviidae": "비단털쥐발귀과", "Threskiornithidae": "저어새과",
+    "Timaliidae": "꼬리치레과", "Troglodytidae": "굴뚝새과", "Turdidae": "지빠귀과",
+    "Upupidae": "후투티과", "Zosteropidae": "동박새과"
+}
+
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -126,33 +150,23 @@ def load_bird_map():
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # ⭐️ [핵심 수정] 14번째 열(O열)을 직접 조준해서 읽습니다.
-            # skiprows=2: 헤더가 2줄이므로 데이터가 시작되는 3번째 줄부터 읽기 위해
-            # header=None: 컬럼 이름을 자동으로 잡지 않고 인덱스(0, 1, 2...)로 쓰기 위해
-            
+            # 헤더 없이 읽고 4열(이름), 14열(과) 추출
             df = pd.read_csv(file_path, skiprows=2, header=None, encoding=enc)
             
-            # 컬럼 개수가 충분한지 확인 (적어도 15개 이상이어야 함)
             if df.shape[1] < 15: continue
 
-            # 4번 열(Index 4): 대표국명 (새 이름)
-            # 14번 열(Index 14): Family 국명 (과 이름 - 한글)
             bird_data = df.iloc[:, [4, 14]].copy()
             bird_data.columns = ['name', 'family']
             
-            # 결측치 제거
             bird_data = bird_data.dropna()
-            
-            # 데이터 정제 (공백 제거)
             bird_data['name'] = bird_data['name'].astype(str).str.strip()
             bird_data['family'] = bird_data['family'].astype(str).str.strip()
             
-            # 혹시 모를 헤더 찌꺼기 제거
             filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
-            # 전체 종 수 (중복 포함 엑셀 줄 수)
-            total_rows_count = len(bird_data)
+            # 중복 제거 없이 전체 사용 (602종)
+            total_species_count = len(bird_data)
 
             # 매핑 데이터 생성
             bird_list = bird_data['name'].tolist()
@@ -160,7 +174,7 @@ def load_bird_map():
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
             family_total_counts = bird_data['family'].value_counts().to_dict()
             
-            return name_to_no, name_to_family, total_rows_count, family_total_counts
+            return name_to_no, name_to_family, total_species_count, family_total_counts
         except Exception as e:
             continue
         
@@ -182,7 +196,8 @@ def get_data():
 def save_data(bird_name):
     bird_name = bird_name.strip()
     if bird_name not in BIRD_MAP:
-        return f"⚠️ '{bird_name}'은(는) 족보에 없는 이름입니다."
+        # ⭐️ [수정] 멘트 변경: 족보 -> 도감 목록
+        return f"⚠️ '{bird_name}'은(는) 도감 목록에 없는 이름입니다."
     try:
         df = get_data()
         if bird_name in df['bird_name'].values: return "이미 등록된 새입니다."
@@ -227,7 +242,7 @@ st.title("🦅 나의 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [사이드바] 과별 수집 현황 (한글 데이터 직접 사용)
+# 사이드바
 with st.sidebar:
     st.header("📊 과별 수집 현황")
     st.caption("전체 도감 대비 내가 모은 새")
@@ -259,9 +274,8 @@ with st.sidebar:
     else:
         st.warning("⚠️ 족보 파일(data.csv)을 읽는 중 문제가 발생했습니다.")
 
-# 메인 요약 박스 + 진행바
+# 메인 요약 박스
 total_collected = len(df)
-# 전체 종 수 (엑셀 행 개수)
 total_species = TOTAL_SPECIES_COUNT if TOTAL_SPECIES_COUNT > 0 else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
 
@@ -280,14 +294,23 @@ tab1, tab2, tab3 = st.tabs(["✍️ 직접 입력", "📸 AI 분석", "🛠️ �
 
 with tab1:
     st.subheader("새 이름 직접 기록")
+    # ⭐️ [핵심] 연속 입력 최적화 함수
     def add_manual():
+        # 1. 입력값 가져오기
         name = st.session_state.input_bird.strip()
+        
+        # 2. 입력창 즉시 비우기 (어떤 결과든 상관없이)
+        st.session_state.input_bird = ""
+        
+        # 3. 로직 처리
         if name:
             res = save_data(name)
             if res is True: 
                 st.toast(f"✅ {name} 등록 완료!")
-                st.session_state.input_bird = ""
-            else: st.error(res)
+            else: 
+                # 실패 메시지도 Toast로 띄워서 입력 흐름 방해 안 함
+                st.toast(f"🚫 {res}")
+                
     st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
 
 with tab2:
@@ -333,7 +356,7 @@ with tab2:
                             if res is True: 
                                 st.balloons()
                                 st.toast(f"🎉 {bird_name} 등록 성공!")
-                                st.rerun()
+                                st.rerun() # AI 분석에서는 성공 시 바로 반영되는 게 좋음
                             else: st.error(res)
                     else:
                         st.warning(f"⚠️ **{bird_name}**")
