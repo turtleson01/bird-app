@@ -9,7 +9,7 @@ import os
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 설정
+# CSS: 디자인 심플화 (테두리 제거, 업로드 버튼 숨김)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -17,17 +17,35 @@ hide_streamlit_style = """
             header {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
+            /* 1. 도감 요약 박스: 진한 초록색 테두리 제거 */
             .summary-box {
                 padding: 20px; 
                 border-radius: 15px; 
                 background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-                border-left: 6px solid #2e7d32;
+                /* border-left: 6px solid #2e7d32;  <-- 이 부분을 삭제했습니다 */
                 margin-bottom: 25px;
                 box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                text-align: left;
             }
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
+            /* 2. 파일 업로더: 'Browse files' 버튼 숨기기 */
+            [data-testid="stFileUploader"] button {
+                display: none !important;
+            }
+            /* 업로드 영역 전체를 클릭 가능하게 보이도록 커서 설정 */
+            [data-testid="stFileUploader"] section {
+                cursor: pointer;
+            }
+
+            /* 목록 스타일 */
+            .bird-item { 
+                font-size: 1.1rem; 
+                padding: 12px 5px; 
+                font-weight: 500; 
+                color: #333;
+            }
             hr { margin: 0 !important; border-top: 1px solid #eee !important; }
 
             /* 파란색 등록 버튼 */
@@ -169,7 +187,8 @@ with tab1:
 
 with tab2:
     st.subheader("사진으로 이름 찾기")
-    uploaded_files = st.file_uploader("새 사진 업로드", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    # 'Browse files' 버튼은 CSS로 숨겼으므로 드래그앤드롭 영역만 보입니다.
+    uploaded_files = st.file_uploader("새 사진 업로드 (터치 또는 클릭)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
     if 'ai_results' not in st.session_state: st.session_state.ai_results = {}
     if 'dismissed_files' not in st.session_state: st.session_state.dismissed_files = set()
@@ -236,7 +255,6 @@ with tab2:
 with tab3:
     st.subheader("데이터 관리")
     if not df.empty:
-        # ⭐️ placeholder 옵션 추가
         to_delete = st.multiselect("삭제할 기록 선택", options=df['bird_name'].tolist(), placeholder="도감에서 삭제할 새 이름을 입력하세요")
         if to_delete:
             if st.button(f"🗑️ 선택한 {len(to_delete)}개 삭제하기", type="primary"):
@@ -252,6 +270,7 @@ if not df.empty:
         real_no = BIRD_MAP.get(bird, 9999)
         display_no = "??" if real_no == 9999 else real_no
         
+        # 번호와 이름 왼쪽 정렬 (gap: 12px)
         st.markdown(f"""
         <div style="display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:8px 0; border-bottom:1px solid #eee;">
             <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
