@@ -16,19 +16,19 @@ hide_streamlit_style = """
             footer {visibility: hidden;}
             .stApp {padding-top: 10px;}
             
-            /* 1. 도감 요약 박스 */
+            /* 1. 도감 요약 박스 (테두리 없음, 깔끔) */
             .summary-box {
                 padding: 20px; 
                 border-radius: 15px; 
                 background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-                margin-bottom: 10px;
+                margin-bottom: 10px; /* 아래 진행바와의 간격 */
                 box-shadow: 0 4px 6px rgba(0,0,0,0.05);
                 text-align: left;
             }
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* 2. 연두색 진행바 */
+            /* 2. 연두색 진행바 컨테이너 */
             .progress-container {
                 width: 100%;
                 background-color: #f1f3f5;
@@ -39,7 +39,7 @@ hide_streamlit_style = """
             }
             .progress-bar {
                 height: 100%;
-                background-color: #66bb6a;
+                background-color: #66bb6a; /* 연두색 */
                 border-radius: 10px;
                 transition: width 0.5s ease-in-out;
             }
@@ -76,7 +76,7 @@ hide_streamlit_style = """
                 font-weight: 700;
             }
             
-            /* 파일 업로더 버튼 숨기기 */
+            /* 파일 업로더 'Browse files' 버튼 숨기기 (X버튼은 살림) */
             [data-testid="stFileUploaderDropzone"] button { display: none !important; }
             [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
 
@@ -118,7 +118,7 @@ except:
     st.error("🚨 Secrets 설정이 필요합니다.")
     st.stop()
 
-# --- [2. 데이터 및 족보 관리] ---
+# --- [2. 데이터 및 족보 관리 (스마트 로더)] ---
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
@@ -127,51 +127,53 @@ def load_bird_map():
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
-            # ⭐️ [수정] 헤더를 유연하게 찾도록 개선
-            # 1. 일단 그냥 읽어봅니다 (헤더 자동 탐지)
-            df = pd.read_csv(file_path, encoding=enc)
+            # 1. 헤더 위치 자동 탐색 (Family나 Name이 있는 줄 찾기)
+            header_row_idx = 0
+            with open(file_path, 'r', encoding=enc) as f:
+                lines = [f.readline() for _ in range(10)]
+                for i, line in enumerate(lines):
+                    line_lower = line.lower()
+                    if (('family' in line_lower or '과' in line_lower) and 
+                        ('name' in line_lower or '국명' in line_lower)):
+                        header_row_idx = i
+                        break
             
-            # 2. 만약 'Family'나 'Name' 컬럼이 없으면, skiprows=2 적용해서 다시 시도 (기존 방식)
-            # (헤더가 2번째 줄에 있거나 아예 없는 경우 대비)
-            def find_col(df, candidates):
-                for col in df.columns:
-                    if str(col).strip() in candidates:
-                        return col
+            # 2. 찾은 위치로 데이터 읽기
+            df = pd.read_csv(file_path, header=header_row_idx, encoding=enc)
+            
+            # 3. 컬럼 이름 유연하게 찾기
+            def find_col_name(cols, keywords):
+                for col in cols:
+                    for kw in keywords:
+                        if kw in str(col).lower(): return col
                 return None
-
-            family_col = find_col(df, ['Family', '과', 'family'])
-            name_col = find_col(df, ['Name', '국명', 'name', 'Ko_Name'])
-
-            # 첫 시도 실패 시 skiprows=2로 재시도 (헤더 없는 경우 인덱스로 접근)
-            if not family_col or not name_col:
-                df = pd.read_csv(file_path, skiprows=2, encoding=enc)
-                # 인덱스로 접근 (C열=2, E열=4)
-                if df.shape[1] >= 5:
-                    bird_data = df.iloc[:, [2, 4]].dropna()
-                    bird_data.columns = ['family', 'name']
-                else:
-                    continue # 컬럼 부족하면 다음 인코딩 시도
-            else:
-                # 헤더를 찾았으면 해당 컬럼 사용
-                bird_data = df[[family_col, name_col]].dropna()
-                bird_data.columns = ['family', 'name']
-
-            # 데이터 정제
-            bird_data['name'] = bird_data['name'].str.strip()
-            bird_data['family'] = bird_data['family'].str.strip()
+                
+            family_col = find_col_name(df.columns, ['family', '과', 'familia'])
+            name_col = find_col_name(df.columns, ['name', '국명', '이름', 'ko_name'])
             
-            # 헤더 텍스트가 데이터로 들어가는 것 방지
-            filter_keywords = ['과', 'Family', '이명', '정명', 'Scientific Name']
+            # 4. 컬럼을 못 찾으면 인덱스(위치)로 시도 (C열=2, E열=4)
+            if not family_col or not name_col:
+                if df.shape[1] >= 5:
+                    bird_data = df.iloc[:, [2, 4]]
+                else: continue
+            else:
+                bird_data = df[[family_col, name_col]]
+                
+            bird_data.columns = ['family', 'name']
+            bird_data = bird_data.dropna()
+            
+            # 데이터 정제
+            bird_data['name'] = bird_data['name'].astype(str).str.strip()
+            bird_data['family'] = bird_data['family'].astype(str).str.strip()
+            
+            # 헤더가 데이터로 들어간 경우 제거
+            filter_keywords = ['과', 'Family', '이명', '정명']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
-            # 1. 이름 -> 번호
+            # 매핑 데이터 생성
             bird_list = bird_data['name'].tolist()
             name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
-            
-            # 2. 이름 -> 과
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
-            
-            # 3. 과 -> 전체 개수
             family_total_counts = bird_data['family'].value_counts().to_dict()
             
             return name_to_no, name_to_family, family_total_counts
@@ -258,8 +260,10 @@ with st.sidebar:
             total = FAMILY_TOTAL_COUNTS[family]
             count = my_family_counts.get(family, 0)
             
+            # 수집한 과는 강조
             highlight_class = "stat-highlight" if count > 0 else ""
             
+            # 카드 디자인 렌더링
             st.markdown(f"""
             <div class="sidebar-card">
                 <div class="card-title">{family}</div>
@@ -270,14 +274,13 @@ with st.sidebar:
             """, unsafe_allow_html=True)
             
     else:
-        st.warning("⚠️ 족보 파일(data.csv)에서 'Family' 정보를 찾을 수 없습니다.")
+        st.warning("⚠️ 족보 파일(data.csv)에서 '과(Family)' 정보를 읽지 못했습니다. 파일 형식을 확인해주세요.")
 
 # ⭐️ 메인 요약 박스 + 연두색 진행바
 total_collected = len(df)
 total_species = len(BIRD_MAP) if BIRD_MAP else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
 
-# "마리" -> "종"으로 수정
 st.markdown(f"""
     <div class="summary-box">
         <span class="summary-text">🌱 현재까지 모은 도감</span><br>
