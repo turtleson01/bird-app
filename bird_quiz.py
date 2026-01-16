@@ -11,7 +11,6 @@ st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
 # --- [2. 데이터 및 설정] ---
 BADGE_INFO = {
-    # 이름: {등급, 설명, 우선순위}
     "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 시작이 반입니다.", "rank": 1},
     "🥉 초보 탐조가": {"tier": "rare", "desc": "10마리 이상의 새를 만났습니다.", "rank": 2},
     "🥈 중급 탐조가": {"tier": "epic", "desc": "30마리 이상의 새를 수집했습니다.", "rank": 3},
@@ -27,12 +26,11 @@ BADGE_INFO = {
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종을 5마리 이상 보호(기록)했습니다.", "rank": 5},
 }
 
-# 등급별 색상/아이콘 설정
 TIER_STYLE = {
-    "rare":      {"color": "blue", "icon": "🔹", "label": "Rare"},
-    "epic":      {"color": "violet", "icon": "🔮", "label": "Epic"},
-    "unique":    {"color": "orange", "icon": "🌟", "label": "Unique"},
-    "legendary": {"color": "green", "icon": "🌿", "label": "Legendary"},
+    "rare":      {"color": "#1565C0", "bg": "#E3F2FD", "icon": "🔹", "label": "Rare"},
+    "epic":      {"color": "#6A1B9A", "bg": "#F3E5F5", "icon": "🔮", "label": "Epic"},
+    "unique":    {"color": "#EF6C00", "bg": "#FFF3E0", "icon": "🌟", "label": "Unique"},
+    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "icon": "🌿", "label": "Legendary"},
 }
 
 RARE_BIRDS = {
@@ -69,11 +67,22 @@ footer {visibility: hidden;}
 .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
 .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
 
-/* 사이드바 배지 (단순 표시용) */
+/* ⭐️ 사이드바 배지 스타일 (1번 사진처럼 옹기종기 모이게) */
+.sidebar-badge-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
 .sidebar-badge {
-    display: inline-block; padding: 4px 8px; border-radius: 12px;
-    font-size: 0.8rem; font-weight: bold; margin: 2px;
-    background-color: #f0f2f6; border: 1px solid #dcdcdc; color: #333;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    white-space: nowrap;
 }
 
 /* 탭 스타일 */
@@ -204,7 +213,6 @@ st.title("🦅 탐조 도감")
 df = get_data()
 current_badges = calculate_badges(df)
 
-# 배지 획득 알림
 if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
@@ -213,13 +221,28 @@ if new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
 
-# 사이드바 (간단하게 보유 배지만 나열)
+# --- ⭐️ 사이드바 (1번 사진처럼 옹기종기 스타일로 복구) ---
 with st.sidebar:
     st.header("🏆 획득 배지")
+    
     if current_badges:
-        # 사이드바에는 단순한 태그 형태로 표시 (CSS class sidebar-badge)
-        badges_html = "".join([f"<span class='sidebar-badge'>{b}</span>" for b in current_badges])
-        st.markdown(f"<div>{badges_html}</div>", unsafe_allow_html=True)
+        # 배지 목록을 HTML로 생성 (flex-wrap 사용)
+        badge_html = '<div class="sidebar-badge-container">'
+        
+        # 랭크순 정렬
+        sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
+        
+        for badge_name in sorted_badges:
+            info = BADGE_INFO.get(badge_name, {"tier": "rare"})
+            style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
+            # 알약 모양 디자인
+            badge_html += f"""
+            <span class="sidebar-badge" style="background-color: {style['bg']}; color: {style['color']}; border: 1px solid {style['color']}40;">
+                {style['icon']} {badge_name}
+            </span>
+            """
+        badge_html += '</div>'
+        st.markdown(badge_html, unsafe_allow_html=True)
     else:
         st.caption("획득한 배지가 없습니다.")
     
@@ -259,7 +282,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ⭐️ 탭 4개로 변경 (배지 도감 추가)
+# 탭 메뉴
 tab1, tab2, tab3, tab4 = st.tabs(["✍️ 종 추가하기", "📸 AI 분석", "🏆 배지 도감", "🛠️ 기록 관리"])
 
 with tab1:
@@ -337,30 +360,24 @@ with tab2:
                                 st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
                                 st.rerun()
 
-# ⭐️ [신규] 배지 도감 탭
+# ⭐️ 배지 도감 탭
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
     
-    # 배지를 랭크 순서대로 정렬
     sorted_badges = sorted(BADGE_INFO.keys(), key=lambda x: BADGE_INFO[x]['rank'])
     
     for badge_name in sorted_badges:
         info = BADGE_INFO[badge_name]
         is_earned = badge_name in current_badges
+        style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
         
-        # 스타일 결정
-        style = TIER_STYLE.get(info['tier'], {"color": "gray", "icon": "⚫", "label": "Normal"})
-        
-        # 카드 디자인 (획득 여부에 따라 불투명도 조절)
+        # 획득 여부에 따른 스타일
         opacity = "1.0" if is_earned else "0.5"
         grayscale = "0%" if is_earned else "100%"
         border_color = style['color'] if is_earned else "#e0e0e0"
-        
-        # 상태 메시지
         status_msg = "✅ 획득 완료!" if is_earned else "🔒 미획득"
         
-        # 컨테이너로 표시
         with st.container(border=True):
             c1, c2 = st.columns([0.2, 0.8])
             with c1:
