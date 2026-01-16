@@ -315,7 +315,7 @@ with tab1:
                 if res is True: 
                     msg = f"✅ {name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
-                    st.toast(msg); st.rerun()
+                    st.toast(msg) # ⭐️ st.rerun() 제거함 (자동 새로고침됨)
                 else: st.toast(f"🚫 {res}")
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
