@@ -7,104 +7,24 @@ from datetime import datetime
 import os
 import time
 
-# --- [1. 기본 설정 & CSS] ---
+# --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 배지 스타일 (버튼처럼 보이게 커서 변경)
-hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            .stApp {padding-top: 10px;}
-            
-            /* 요약 박스 */
-            .summary-box {
-                padding: 20px; 
-                border-radius: 15px; 
-                background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-                margin-bottom: 10px;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-                text-align: left;
-            }
-            .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
-            .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
-            
-            /* ⭐️ 배지 스타일 (클릭 가능하게 변경) */
-            /* Streamlit 버튼 스타일 덮어쓰기 */
-            div.stButton > button.badge-btn {
-                border-radius: 20px !important;
-                padding: 4px 12px !important;
-                font-size: 0.85rem !important;
-                font-weight: 800 !important;
-                margin: 2px !important;
-                height: auto !important;
-                line-height: 1.2 !important;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-                border-width: 2px !important;
-                transition: transform 0.1s !important;
-            }
-            div.stButton > button.badge-btn:active { transform: scale(0.95); }
-            div.stButton > button.badge-btn:focus { outline: none; box-shadow: none; }
+# --- [2. 데이터 및 설정] ---
 
-            /* 등급별 색상 (버튼 텍스트/배경/테두리 강제 적용) */
-            /* Rare (파랑) */
-            div.stButton > button.badge-rare { 
-                background-color: #E3F2FD !important; color: #1565C0 !important; border-color: #90CAF9 !important; 
-            }
-            /* Epic (보라) */
-            div.stButton > button.badge-epic { 
-                background-color: #F3E5F5 !important; color: #7B1FA2 !important; border-color: #CE93D8 !important; 
-            }
-            /* Unique (노랑) */
-            div.stButton > button.badge-unique { 
-                background-color: #FFFDE7 !important; color: #F9A825 !important; border-color: #FFF59D !important; 
-            }
-            /* Legendary (초록) */
-            div.stButton > button.badge-legendary { 
-                background-color: #E8F5E9 !important; color: #2E7D32 !important; border-color: #A5D6A7 !important; 
-            }
-
-            /* 희귀종 태그 */
-            .rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
-            .tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-            .tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
-            .tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-
-            /* 기타 UI */
-            .sidebar-card { background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 15px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-            .stat-highlight { color: #2e7d32; font-weight: 700; }
-            
-            /* 일반 버튼 (등록 버튼 등) */
-            div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5F6, #90CAF9); color: white !important; border: none; border-radius: 12px; padding: 0.6rem 1rem; font-weight: 700; width: 100%; box-shadow: 0 3px 5px rgba(0,0,0,0.1); }
-            
-            [data-testid="stFileUploaderDropzone"] button { display: none !important; }
-            [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
-            
-            /* 버튼 컨테이너 정렬 */
-            .element-container:has(> .stButton) { display: inline-block; width: auto !important; margin-right: 5px; }
-            </style>
-            """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-try:
-    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    API_KEY = st.secrets["GOOGLE_API_KEY"]
-except:
-    st.error("🚨 Secrets 설정이 필요합니다.")
-    st.stop()
-
-# --- [2. 데이터 및 족보 관리] ---
-
+# ⭐️ 배지 정보 (이모지 포함 정확한 이름 필수)
 BADGE_INFO = {
     "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다!", "rank": 1},
     "🥉 초보 탐조가": {"tier": "rare", "desc": "10마리 이상 수집", "rank": 2},
     "🥈 중급 탐조가": {"tier": "epic", "desc": "30마리 이상 수집", "rank": 3},
     "🥇 마스터 탐조가": {"tier": "unique", "desc": "50마리 이상 수집", "rank": 4},
     "💎 전설의 탐조가": {"tier": "legendary", "desc": "100마리 이상 수집", "rank": 5},
+    
     "🦆 오리 박사": {"tier": "epic", "desc": "오리과 5마리 이상 수집", "rank": 3},
     "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리과) 3마리 이상 수집", "rank": 4},
     "🦢 우아한 백로": {"tier": "epic", "desc": "백로과 3마리 이상 수집", "rank": 3},
     "🌲 숲속의 드러머": {"tier": "epic", "desc": "딱따구리과 2마리 이상 수집", "rank": 3},
+    
     "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종 첫 발견!", "rank": 4},
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 발견", "rank": 5},
 }
@@ -126,6 +46,79 @@ RARE_BIRDS = {
     "큰소쩍새": "natural", "어치": "natural" 
 }
 RARE_LABEL = { "class1": "👑 멸종위기 1급", "class2": "⭐ 멸종위기 2급", "natural": "🌿 천연기념물" }
+
+# --- [3. CSS 스타일링 (배지 디자인 복구)] ---
+# 등급별 색상 정의
+TIER_COLORS = {
+    "rare":      {"bg": "#E3F2FD", "text": "#1565C0", "border": "#90CAF9"}, # 옅은 파랑
+    "epic":      {"bg": "#F3E5F5", "text": "#7B1FA2", "border": "#CE93D8"}, # 보라
+    "unique":    {"bg": "#FFFDE7", "text": "#F9A825", "border": "#FFF59D"}, # 노란색
+    "legendary": {"bg": "#E8F5E9", "text": "#2E7D32", "border": "#A5D6A7"}, # 초록
+}
+
+# 기본 CSS
+badge_css = """
+<style>
+/* 전체 앱 상단 여백 조정 */
+.stApp {padding-top: 10px;}
+
+/* 버튼 기본 스타일 (모든 버튼을 배지처럼) */
+div.stButton > button {
+    border-radius: 20px !important;
+    padding: 5px 10px !important;
+    font-size: 0.85rem !important;
+    font-weight: 800 !important;
+    border-width: 2px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    width: 100%;
+    margin-bottom: 5px;
+}
+div.stButton > button:active { transform: scale(0.95); }
+div.stButton > button:focus { outline: none; }
+
+/* 요약 박스 */
+.summary-box {
+    padding: 20px; border-radius: 15px; 
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: left;
+}
+.summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
+.summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
+
+/* 희귀종 태그 */
+.rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
+.tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+.tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
+.tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+
+/* 설명창(info) 스타일 */
+.stAlert { padding: 10px; margin-bottom: 10px; font-size: 0.85rem; }
+</style>
+"""
+
+# 각 배지 이름별로 색상을 입히는 CSS 자동 생성
+css_rules = ""
+for name, info in BADGE_INFO.items():
+    colors = TIER_COLORS.get(info['tier'], TIER_COLORS['rare'])
+    # aria-label 속성을 이용해 특정 텍스트를 가진 버튼만 타겟팅
+    css_rules += f"""
+    div.stButton > button[aria-label="{name}"] {{
+        background-color: {colors['bg']} !important;
+        color: {colors['text']} !important;
+        border-color: {colors['border']} !important;
+    }}
+    """
+badge_css += f"<style>{css_rules}</style>"
+st.markdown(badge_css, unsafe_allow_html=True)
+
+try:
+    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
+except:
+    st.error("🚨 Secrets 설정이 필요합니다.")
+    st.stop()
+
+# --- [4. 데이터 처리 로직] ---
 
 @st.cache_data
 def load_bird_map():
@@ -211,7 +204,6 @@ def calculate_badges(df):
     if rare_count >= 5: badges.append("🛡️ 자연의 수호자")
     return badges
 
-# --- [3. AI 분석] ---
 def analyze_bird_image(image, user_doubt=None):
     try:
         genai.configure(api_key=API_KEY)
@@ -223,16 +215,14 @@ def analyze_bird_image(image, user_doubt=None):
         return response.text.strip()
     except: return "Error | 분석 오류"
 
-# --- [4. 메인 화면] ---
+# --- [5. 메인 앱 실행] ---
 st.title("🦅 탐조 도감")
 
 df = get_data()
 
-# 배지 계산 및 축하 로직
+# 배지 상태 관리
 current_badges = calculate_badges(df)
-
-if 'my_badges' not in st.session_state:
-    st.session_state['my_badges'] = current_badges
+if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
@@ -241,71 +231,45 @@ if new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
 
-# 사이드바
+# 토글 상태 저장용 세션
+if 'selected_badge_desc' not in st.session_state:
+    st.session_state.selected_badge_desc = {}
+
+# --- 사이드바 ---
 with st.sidebar:
     st.header("🏆 나의 배지")
     
     if current_badges:
+        # 배지 랭크순 정렬
         sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
         top_badges = sorted_badges[:3]
         other_badges = sorted_badges[3:]
         
-        # ⭐️ 배지를 버튼으로 그리는 함수
-        def draw_badge_button(badge_name, key_suffix):
-            info = BADGE_INFO.get(badge_name, {"tier": "rare", "desc": "설명 없음"})
-            tier = info['tier']
-            # 각 배지를 버튼으로 생성
-            if st.button(badge_name, key=f"btn_{badge_name}_{key_suffix}", help="클릭하여 설명 보기"):
-                # 클릭 시 토스트 메시지로 설명 출력
-                st.toast(f"**{badge_name}**\n\n✅ 달성 조건: {info['desc']}", icon="🏅")
+        # ⭐️ 배지 그리드 렌더링 함수
+        def render_badge_grid(badges_list, key_prefix):
+            # 2열로 배치
+            cols = st.columns(2)
+            for i, badge_name in enumerate(badges_list):
+                # 왼쪽/오른쪽 컬럼 번갈아가며 사용
+                with cols[i % 2]:
+                    # 1. 배지(버튼) 출력
+                    if st.button(badge_name, key=f"{key_prefix}_{badge_name}"):
+                        # 클릭 시 토글 (On/Off)
+                        current = st.session_state.selected_badge_desc.get(badge_name, False)
+                        st.session_state.selected_badge_desc[badge_name] = not current
+                    
+                    # 2. 버튼 바로 아래에 설명 출력 (토글 켜져있을 때만)
+                    if st.session_state.selected_badge_desc.get(badge_name, False):
+                        desc = BADGE_INFO.get(badge_name, {}).get('desc', '설명 없음')
+                        st.info(f"{desc}", icon="✅")
 
-            # 버튼에 색상 클래스 입히기 (JS 사용)
-            # Streamlit 버튼은 class를 직접 못 넣으므로 JS로 후처리하는 트릭 대신
-            # 그냥 type="secondary"를 쓰고 위에 정의한 CSS Selector(:has)로 색을 입히는게 안전하지만
-            # 여기서는 버튼 텍스트를 인식하여 CSS class를 매핑하는 방식을 위해
-            # 각 버튼 생성 직후에 해당 버튼을 꾸미는 스타일을 주입하는 방식 사용
-            
-            # (CSS로 버튼 스타일 강제 적용을 위해 위쪽 style 태그에서 정의한 클래스 사용)
-            # 다만 Streamlit Python 코드만으로는 특정 버튼에 클래스를 1:1로 매핑하기 어려우므로
-            # 여기서는 버튼의 '텍스트'를 기반으로 색상을 입히는 CSS를 동적으로 생성하지 않고
-            # 위에서 정의한 .stButton button[...innerText...] 트릭 대신
-            # 간단하게 버튼을 누르면 반응하는 기능에 집중하고,
-            # 색상은 "모든 버튼에 적용" 되거나 "순서대로 적용"되는 한계가 있어
-            # 커스텀 HTML 버튼 대신 Streamlit Native Button을 사용하되
-            # 최대한 깔끔하게 보이도록 CSS에서 `div.stButton > button` 전역 스타일을 잡았습니다.
-            
-            # ⭐️ 등급별 색상을 개별 적용하기 위한 트릭 (data-testid 등 활용 불가하므로)
-            # 여기서는 복잡도를 낮추기 위해 'Javascript' 주입 없이
-            # CSS의 :nth-child 등을 쓰기도 어려우므로
-            # **HTML/CSS로 배지를 그리고, 클릭 기능은 포기**하거나
-            # **버튼으로 만들고 색상은 통일**하거나 해야 하는데
-            # 요청하신 "클릭 시 설명"을 위해 **버튼**을 택했습니다.
-            # (등급별 색상은 버튼 텍스트에 따라 CSS로 입히기 까다로워 약간의 JS가 필요하지만
-            # Streamlit Cloud 호환성을 위해 JS 제외하고, 대신 CSS에서
-            # '모든 배지 버튼'을 예쁘게 꾸미는 것으로 타협하거나
-            # st.markdown(HTML) + JavaScript로 구현해야 완벽합니다.)
-            
-            # **[타협안]**: 현재 코드는 버튼 기능(클릭 시 설명)에 집중하고,
-            # 색상은 CSS 상단에서 정의한 `badge-rare` 등이 적용되지 않습니다 (Native Button이라서).
-            # 대신 버튼에 이모지(🥇, 🥈)가 있어서 등급 구분이 됩니다.
-            pass
-
-        # 실제 버튼 그리기 (버튼 위 CSS 적용을 위해 컨테이너 사용)
-        # ⭐️ 자바스크립트 없이 버튼별 색상을 입히는 건 불가능하므로
-        # 여기서는 HTML 태그(모양+색상) + 투명 버튼(클릭용)을 겹치는 고급 기술 대신
-        # **가장 확실한 방법: st.button을 쓰되, 색상은 통일하고 등급은 이모지로 구분**합니다.
-        # (아까 CSS에서 .badge-rare 등을 정의했지만 st.button에는 적용이 안 됩니다.)
+        # 상위 배지 3개
+        render_badge_grid(top_badges, "top")
         
-        st.write("*(배지를 클릭하면 설명이 나옵니다)*")
-        st.write("---")
-        
-        for b in top_badges:
-            draw_badge_button(b, "top")
-            
+        # 나머지 배지 (확장 패널)
         if other_badges:
-            with st.expander("🔽 보유 배지 전체 보기"):
-                for b in other_badges:
-                    draw_badge_button(b, "other")
+            with st.expander("🔽 전체 배지 보기"):
+                render_badge_grid(other_badges, "other")
     else:
         st.caption("아직 배지가 없습니다.")
 
@@ -330,6 +294,7 @@ with st.sidebar:
                 </div>
             </div>""", unsafe_allow_html=True)
 
+# 메인 콘텐츠 (진행바 등)
 total_collected = len(df)
 total_species = TOTAL_SPECIES_COUNT if TOTAL_SPECIES_COUNT > 0 else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
