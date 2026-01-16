@@ -31,12 +31,11 @@ BADGE_INFO = {
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 기록. 당신은 자연의 지킴이입니다.", "rank": 5},
 }
 
-# 배경색(bg)을 아주 연한 파스텔톤으로 설정하여 획득 시 채워지는 느낌 강조
 TIER_STYLE = {
-    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "label": "Rare"},
-    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "label": "Epic"},
-    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "label": "Unique"},
-    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "label": "Legendary"},
+    "rare":      {"color": "#1565C0", "bg": "#E3F2FD", "icon": "🔹", "label": "Rare"},
+    "epic":      {"color": "#6A1B9A", "bg": "#F3E5F5", "icon": "🔮", "label": "Epic"},
+    "unique":    {"color": "#EF6C00", "bg": "#FFF3E0", "icon": "🌟", "label": "Unique"},
+    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "icon": "🌿", "label": "Legendary"},
 }
 
 RARE_BIRDS = {
@@ -185,7 +184,7 @@ def calculate_badges(df):
         if unique_families >= 15: badges.append("🌈 다채로운 시선")
         if fam_counts.get('오리과', 0) >= 10: badges.append("🦆 호수의 지배자")
         raptor_count = fam_counts.get('수리과', 0) + fam_counts.get('매과', 0)
-        if raptor_count >= 5: badges.append("🦅 하늘의 제왕")
+        if raptor_count >= 5: badges.append("👑 왕의 자질")
         if fam_counts.get('백로과', 0) >= 5: badges.append("🦢 우아한 백로")
         if fam_counts.get('딱다구리과', 0) >= 3: badges.append("🌲 숲속의 드러머")
         if fam_counts.get('올빼미과', 0) >= 1: badges.append("🦉 밤의 추적자")
@@ -221,7 +220,7 @@ current_badges = calculate_badges(df)
 if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
-    st.snow() # ⭐️ 이펙트 변경: 눈송이/파티클 (폭죽 느낌)
+    st.snow()
     for nb in new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
@@ -242,7 +241,7 @@ with st.sidebar:
         for badge_name in top_badges:
             info = BADGE_INFO.get(badge_name, {"tier": "rare"})
             style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-            tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{badge_name}</span>'
+            tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
             badge_html_parts.append(tag)
         badge_html_parts.append('</div>')
         st.markdown("".join(badge_html_parts), unsafe_allow_html=True)
@@ -254,7 +253,7 @@ with st.sidebar:
                 for badge_name in other_badges:
                     info = BADGE_INFO.get(badge_name, {"tier": "rare"})
                     style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-                    extra_html += f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{badge_name}</span>'
+                    extra_html += f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
                 extra_html += '</div>'
                 st.markdown(extra_html, unsafe_allow_html=True)
     else:
@@ -301,7 +300,7 @@ tab1, tab2, tab3 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 배
 
 # --- [Tab 1] 종 추가 ---
 with tab1:
-    st.subheader("새로운 새 기록하기")
+    st.subheader("✍️ 새로운 새 기록하기")
     input_method = st.radio("입력 방식 선택", ["📝 직접 이름 입력", "📸 AI 사진 분석"], horizontal=True)
     
     if input_method == "📝 직접 이름 입력":
@@ -413,53 +412,23 @@ with tab2:
     else:
         st.info("아직 기록된 새가 없습니다. 첫 새를 등록해보세요!")
 
-# --- [Tab 3] 배지 도감 (⭐️ UI 개편: 박스 전체 색상 적용) ---
+# --- [Tab 3] 배지 도감 ---
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
-    
     sorted_badges = sorted(BADGE_INFO.keys(), key=lambda x: BADGE_INFO[x]['rank'])
-    
     for badge_name in sorted_badges:
         info = BADGE_INFO[badge_name]
         is_earned = badge_name in current_badges
         style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-        
-        # 1. 이름 분리 (아이콘/텍스트)
-        parts = badge_name.split(" ", 1)
-        icon_emoji = parts[0] if len(parts) > 0 else "🏅"
-        clean_name = parts[1] if len(parts) > 1 else badge_name
-        
-        # 2. 스타일 결정
-        # 획득 시: 테두리와 배경색(연한 톤) 적용
-        # 미획득: 회색 테두리, 흰 배경, 흑백 필터, 반투명
-        
-        border_color = style['border'] if is_earned else "#e0e0e0"
-        bg_color = style['bg'] if is_earned else "#ffffff"
-        opacity = "1.0" if is_earned else "0.6"
+        opacity = "1.0" if is_earned else "0.5"
         grayscale = "0%" if is_earned else "100%"
-        text_color = "#333333" if is_earned else "#999999"
-        
-        # 3. HTML 카드 렌더링
-        st.markdown(f"""
-        <div style="
-            border: 2px solid {border_color};
-            background-color: {bg_color};
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            opacity: {opacity};
-            filter: grayscale({grayscale});
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        ">
-            <div style="font-size: 3rem; margin-right: 15px;">{icon_emoji}</div>
-            <div>
-                <div style="font-weight: bold; font-size: 1.1rem; color: {text_color};">
-                    {clean_name} <span style="font-size: 0.8rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 5px; padding: 2px 5px; margin-left: 5px;">{style['label']}</span>
-                </div>
-                <div style="font-size: 0.9rem; color: #666;">{info['desc']}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        status_msg = "✅ 획득 완료!" if is_earned else "🔒 미획득"
+        with st.container(border=True):
+            c1, c2 = st.columns([0.2, 0.8])
+            with c1:
+                st.markdown(f"<div style='font-size:3rem; text-align:center; opacity:{opacity}; filter:grayscale({grayscale});'>{style['icon']}</div>", unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"#### {badge_name} <span style='font-size:0.8rem; color:{style['color']}; border:1px solid {style['color']}; padding:2px 6px; border-radius:10px;'>{style['label']}</span>", unsafe_allow_html=True)
+                st.markdown(f"**조건:** {info['desc']}")
+                st.caption(f"상태: {status_msg}")
