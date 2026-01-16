@@ -7,7 +7,7 @@ from datetime import datetime
 import os
 
 # --- [1. 기본 설정] ---
-st.set_page_config(page_title="나의 탐조 도감", layout="wide", page_icon="🦅")
+st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
 # CSS: 디자인 설정
 hide_streamlit_style = """
@@ -379,3 +379,4 @@ if not df.empty:
         </div>
         """, unsafe_allow_html=True)
 else: st.caption("기록이 없습니다.")
+
