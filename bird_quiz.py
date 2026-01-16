@@ -246,7 +246,7 @@ with st.sidebar:
         badge_html_parts.append('</div>')
         st.markdown("".join(badge_html_parts), unsafe_allow_html=True)
         
-        # 4. ⭐️ 나머지는 Expander로 숨김 (화살표 있어도 이게 낫다!)
+        # 4. 나머지는 Expander로 숨김
         if other_badges:
             with st.expander("🔽 보유 배지 전체 보기"):
                 extra_html = '<div class="sidebar-badge-container">'
@@ -298,14 +298,13 @@ st.markdown(f"""
 # 탭 메뉴
 tab1, tab2, tab3 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 배지 도감"])
 
-# --- [Tab 1] 종 추가 (순서 변경: 직접 입력 먼저) ---
+# --- [Tab 1] 종 추가 ---
 with tab1:
     st.subheader("새로운 새 기록하기")
-    # ⭐️ 순서 변경: [직접 입력]이 먼저 나오도록 수정
     input_method = st.radio("입력 방식 선택", ["📝 직접 이름 입력", "📸 AI 사진 분석"], horizontal=True)
     
     if input_method == "📝 직접 이름 입력":
-        st.info("새 이름을 정확히 알고 계신다면 직접 입력하세요.")
+        # ⭐️ 안내 문구 박스(st.info) 삭제됨!
         sex_selection = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key="manual_sex")
         def add_manual():
             name = st.session_state.input_bird.strip()
