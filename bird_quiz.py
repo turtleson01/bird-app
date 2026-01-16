@@ -10,18 +10,27 @@ import os
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
 # --- [2. 데이터 및 설정] ---
+# ⭐️ 배지 종류 대폭 추가!
 BADGE_INFO = {
+    # [수집 개수]
     "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 시작이 반입니다.", "rank": 1},
+    "🌱 새싹 탐조가": {"tier": "rare", "desc": "3마리의 새를 만났습니다. 이제 시작입니다!", "rank": 1.5}, # 신규
     "🥉 초보 탐조가": {"tier": "rare", "desc": "10마리 이상의 새를 만났습니다.", "rank": 2},
     "🥈 중급 탐조가": {"tier": "epic", "desc": "30마리 이상의 새를 수집했습니다.", "rank": 3},
     "🥇 마스터 탐조가": {"tier": "unique", "desc": "50마리 달성! 이제 새 박사님입니다.", "rank": 4},
     "💎 전설의 탐조가": {"tier": "legendary", "desc": "100마리 달성! 당신은 살아있는 도감입니다.", "rank": 5},
     
+    # [과별 수집 - 신규 추가]
     "🦆 오리 박사": {"tier": "epic", "desc": "오리과 5마리 이상 수집", "rank": 3},
     "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리과) 3마리 이상 수집", "rank": 4},
     "🦢 우아한 백로": {"tier": "epic", "desc": "백로과 3마리 이상 수집", "rank": 3},
     "🌲 숲속의 드러머": {"tier": "epic", "desc": "딱따구리과 2마리 이상 수집", "rank": 3},
+    "🦉 밤의 추적자": {"tier": "unique", "desc": "올빼미과(부엉이 등)를 발견했습니다!", "rank": 4}, # 신규
+    "🧠 똑똑한 새": {"tier": "rare", "desc": "까마귀과(까치, 어치 등) 2마리 이상 수집", "rank": 2}, # 신규
+    "👔 넥타이 신사": {"tier": "rare", "desc": "박새과 2마리 이상 수집", "rank": 2}, # 신규
+    "🏖️ 갯벌의 나그네": {"tier": "epic", "desc": "도요과 3마리 이상 수집", "rank": 3}, # 신규
     
+    # [특수]
     "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종을 처음으로 발견했습니다!", "rank": 4},
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종을 5마리 이상 보호(기록)했습니다.", "rank": 5},
 }
@@ -58,7 +67,6 @@ hide_streamlit_style = """
 footer {visibility: hidden;}
 .stApp {padding-top: 10px;}
 
-/* 요약 박스 */
 .summary-box {
     padding: 20px; border-radius: 15px; 
     background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
@@ -67,30 +75,16 @@ footer {visibility: hidden;}
 .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
 .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
 
-/* ⭐️ 사이드바 배지 스타일 (1번 사진처럼 옹기종기 모이게) */
-.sidebar-badge-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
-}
+.sidebar-badge-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .sidebar-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 10px;
-    border-radius: 15px;
-    font-size: 0.8rem;
-    font-weight: 700;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    white-space: nowrap;
-    margin-bottom: 4px;
+    display: inline-flex; align-items: center; padding: 4px 10px;
+    border-radius: 15px; font-size: 0.8rem; font-weight: 700;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; margin-bottom: 4px;
 }
 
-/* 탭 스타일 */
 .stTabs [data-baseweb="tab-list"] { gap: 10px; }
 .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; border-radius: 5px; }
 
-/* 희귀종 태그 */
 .rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
 .tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
 .tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
@@ -176,20 +170,29 @@ def delete_birds(bird_names_to_delete, current_df):
 def calculate_badges(df):
     badges = []
     count = len(df)
+    # 1. 수집 개수
     if count >= 1: badges.append("🐣 탐조 입문")
+    if count >= 3: badges.append("🌱 새싹 탐조가")
     if count >= 10: badges.append("🥉 초보 탐조가")
     if count >= 30: badges.append("🥈 중급 탐조가")
     if count >= 50: badges.append("🥇 마스터 탐조가")
     if count >= 100: badges.append("💎 전설의 탐조가")
     
+    # 2. 과별 & 특수 조건
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
+        
         if fam_counts.get('오리과', 0) >= 5: badges.append("🦆 오리 박사")
         if fam_counts.get('수리과', 0) >= 3: badges.append("🦅 하늘의 제왕")
         if fam_counts.get('백로과', 0) >= 3: badges.append("🦢 우아한 백로")
         if fam_counts.get('딱다구리과', 0) >= 2: badges.append("🌲 숲속의 드러머")
+        if fam_counts.get('올빼미과', 0) >= 1: badges.append("🦉 밤의 추적자")
+        if fam_counts.get('까마귀과', 0) >= 2: badges.append("🧠 똑똑한 새")
+        if fam_counts.get('박새과', 0) >= 2: badges.append("👔 넥타이 신사")
+        if fam_counts.get('도요과', 0) >= 3: badges.append("🏖️ 갯벌의 나그네")
     
+    # 3. 희귀종
     rare_count = 0
     for name in df['bird_name']:
         if name in RARE_BIRDS: rare_count += 1
@@ -214,7 +217,6 @@ st.title("🦅 탐조 도감")
 df = get_data()
 current_badges = calculate_badges(df)
 
-# 배지 획득 알림
 if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
@@ -223,29 +225,20 @@ if new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
 
-# --- ⭐️ 사이드바 (HTML 코드 출력 문제 해결) ---
+# 사이드바
 with st.sidebar:
     st.header("🏆 획득 배지")
-    
     if current_badges:
-        # ⭐️ 중요: 들여쓰기 없는 깔끔한 문자열로 생성
         badge_html_parts = []
         badge_html_parts.append('<div class="sidebar-badge-container">')
-        
-        # 랭크순 정렬
         sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
-        
         for badge_name in sorted_badges:
             info = BADGE_INFO.get(badge_name, {"tier": "rare"})
             style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-            # 들여쓰기 제거하고 한 줄로 작성
             tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
             badge_html_parts.append(tag)
-            
         badge_html_parts.append('</div>')
-        final_html = "".join(badge_html_parts)
-        
-        st.markdown(final_html, unsafe_allow_html=True)
+        st.markdown("".join(badge_html_parts), unsafe_allow_html=True)
     else:
         st.caption("획득한 배지가 없습니다.")
     
@@ -285,8 +278,8 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 탭 메뉴
-tab1, tab2, tab3, tab4 = st.tabs(["✍️ 종 추가하기", "📸 AI 분석", "🏆 배지 도감", "🛠️ 기록 관리"])
+# ⭐️ 5개의 탭으로 구성
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["✍️ 종 추가하기", "📸 AI 분석", "🏆 배지 도감", "📜 나의 도감", "🛠️ 데이터 관리"])
 
 with tab1:
     st.subheader("종 추가하기")
@@ -307,15 +300,12 @@ with tab1:
 with tab2:
     st.subheader("사진으로 이름 찾기")
     uploaded_files = st.file_uploader("새 사진 업로드", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
-    
     if 'ai_results' not in st.session_state: st.session_state.ai_results = {}
-    
     if uploaded_files:
         for file in uploaded_files:
             if file.name not in st.session_state.ai_results:
                 with st.spinner(f"🔍 {file.name} 분석 중..."):
                     st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file))
-            
             raw = st.session_state.ai_results[file.name]
             if "|" in raw:
                 parts = raw.split("|", 1)
@@ -324,12 +314,10 @@ with tab2:
             else:
                 bird_name = raw.strip()
                 reason = "상세 이유를 가져오지 못했습니다."
-            
             invalid_keywords = ["새이름", "종명", "이름", "새 이름", "모름", "알수없음"]
             if bird_name in invalid_keywords: bird_name = "판독 불가"
             is_valid_bird = True
             if bird_name in ["새 아님", "Error", "판독 불가"] or "오류" in bird_name: is_valid_bird = False
-
             with st.container(border=True):
                 c1, c2 = st.columns([1, 1.5])
                 with c1: st.image(file, use_container_width=True)
@@ -366,19 +354,14 @@ with tab2:
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
-    
     sorted_badges = sorted(BADGE_INFO.keys(), key=lambda x: BADGE_INFO[x]['rank'])
-    
     for badge_name in sorted_badges:
         info = BADGE_INFO[badge_name]
         is_earned = badge_name in current_badges
         style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-        
         opacity = "1.0" if is_earned else "0.5"
         grayscale = "0%" if is_earned else "100%"
-        border_color = style['color'] if is_earned else "#e0e0e0"
         status_msg = "✅ 획득 완료!" if is_earned else "🔒 미획득"
-        
         with st.container(border=True):
             c1, c2 = st.columns([0.2, 0.8])
             with c1:
@@ -388,7 +371,34 @@ with tab3:
                 st.markdown(f"**조건:** {info['desc']}")
                 st.caption(f"상태: {status_msg}")
 
+# ⭐️ [신규] 나의 도감 탭 (목록을 여기로 이동)
 with tab4:
+    st.subheader("📜 나의 탐조 목록")
+    if not df.empty:
+        for index, row in df.iterrows():
+            bird = row['bird_name']
+            real_no = BIRD_MAP.get(bird, 9999)
+            display_no = "??" if real_no == 9999 else real_no
+            sex_info = row.get('sex', '미구분')
+            sex_icon = ""
+            if sex_info == '수컷': sex_icon = " <span style='color:blue; font-size:1rem;'>(♂)</span>"
+            elif sex_info == '암컷': sex_icon = " <span style='color:red; font-size:1rem;'>(♀)</span>"
+            rare_tag = ""
+            if bird in RARE_BIRDS:
+                rarity_code = RARE_BIRDS[bird]
+                tag_class = f"tag-{rarity_code}"
+                tag_text = RARE_LABEL.get(rarity_code, "").replace("👑 ", "").replace("⭐ ", "").replace("🌿 ", "")
+                rare_tag = f"<span class='rare-tag {tag_class}'>{tag_text}</span>"
+            st.markdown(f"""
+            <div style="display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:8px 0; border-bottom:1px solid #eee;">
+                <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
+                <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
+                {rare_tag}
+            </div>
+            """, unsafe_allow_html=True)
+    else: st.info("아직 기록된 새가 없습니다.")
+
+with tab5:
     st.subheader("데이터 관리")
     if not df.empty:
         to_delete = st.multiselect("삭제할 기록 선택", options=df['bird_name'].tolist(), placeholder="도감에서 삭제할 새 이름을 입력하세요")
@@ -397,31 +407,3 @@ with tab4:
                 if delete_birds(to_delete, df) is True:
                     st.success("삭제되었습니다."); st.rerun()
     else: st.info("등록된 기록이 없습니다.")
-
-st.divider()
-st.subheader("📜 나의 탐조 목록")
-if not df.empty:
-    for index, row in df.iterrows():
-        bird = row['bird_name']
-        real_no = BIRD_MAP.get(bird, 9999)
-        display_no = "??" if real_no == 9999 else real_no
-        sex_info = row.get('sex', '미구분')
-        sex_icon = ""
-        if sex_info == '수컷': sex_icon = " <span style='color:blue; font-size:1rem;'>(♂)</span>"
-        elif sex_info == '암컷': sex_icon = " <span style='color:red; font-size:1rem;'>(♀)</span>"
-        
-        rare_tag = ""
-        if bird in RARE_BIRDS:
-            rarity_code = RARE_BIRDS[bird]
-            tag_class = f"tag-{rarity_code}"
-            tag_text = RARE_LABEL.get(rarity_code, "").replace("👑 ", "").replace("⭐ ", "").replace("🌿 ", "")
-            rare_tag = f"<span class='rare-tag {tag_class}'>{tag_text}</span>"
-        
-        st.markdown(f"""
-        <div style="display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:8px 0; border-bottom:1px solid #eee;">
-            <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
-            <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
-            {rare_tag}
-        </div>
-        """, unsafe_allow_html=True)
-else: st.caption("기록이 없습니다.")
