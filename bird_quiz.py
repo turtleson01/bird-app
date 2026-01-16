@@ -10,23 +10,92 @@ import time
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# --- [2. 데이터 및 설정] ---
-
-# ⭐️ 배지 정보 (이모지 포함 정확한 이름 필수)
-BADGE_INFO = {
-    "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다!", "rank": 1},
-    "🥉 초보 탐조가": {"tier": "rare", "desc": "10마리 이상 수집", "rank": 2},
-    "🥈 중급 탐조가": {"tier": "epic", "desc": "30마리 이상 수집", "rank": 3},
-    "🥇 마스터 탐조가": {"tier": "unique", "desc": "50마리 이상 수집", "rank": 4},
-    "💎 전설의 탐조가": {"tier": "legendary", "desc": "100마리 이상 수집", "rank": 5},
+# --- [2. 자바스크립트 & CSS (색상 강제 적용)] ---
+# 이 스크립트가 버튼의 텍스트를 읽어서 색상을 입힙니다.
+custom_js = """
+<script>
+// 버튼 색칠 함수
+function colorButtons() {
+    const badgeColors = {
+        "rare": {bg: "#E3F2FD", text: "#1565C0", border: "#90CAF9"},
+        "epic": {bg: "#F3E5F5", text: "#7B1FA2", border: "#CE93D8"},
+        "unique": {bg: "#FFFDE7", text: "#F9A825", border: "#FFF59D"},
+        "legendary": {bg: "#E8F5E9", text: "#2E7D32", border: "#A5D6A7"}
+    };
     
+    // 배지별 등급 매핑 (파이썬 코드와 일치해야 함)
+    const badgeTiers = {
+        "🐣 탐조 입문": "rare", "🥉 초보 탐조가": "rare", 
+        "🥈 중급 탐조가": "epic", "🥇 마스터 탐조가": "unique", "💎 전설의 탐조가": "legendary",
+        "🦆 오리 박사": "epic", "🦢 우아한 백로": "epic", "🌲 숲속의 드러머": "epic",
+        "🦅 하늘의 제왕": "unique", "🍀 럭키 탐조가": "unique",
+        "🛡️ 자연의 수호자": "legendary"
+    };
+
+    // 모든 버튼을 찾아서 스타일 적용
+    const buttons = window.parent.document.querySelectorAll('.stButton button');
+    buttons.forEach(btn => {
+        const text = btn.innerText;
+        if (badgeTiers[text]) {
+            const style = badgeColors[badgeTiers[text]];
+            btn.style.backgroundColor = style.bg;
+            btn.style.color = style.text;
+            btn.style.borderColor = style.border;
+            btn.style.borderRadius = "20px";
+            btn.style.fontWeight = "800";
+            btn.style.borderWidth = "2px";
+        }
+    });
+}
+
+// 1초마다 색칠 시도 (스트림릿 재실행 대응)
+setInterval(colorButtons, 1000);
+</script>
+
+<style>
+/* 설명창 스타일 */
+div[data-testid="stAlert"] {
+    padding: 0.5rem 1rem;
+    margin-top: 0px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+}
+/* 요약 박스 */
+.summary-box {
+    padding: 20px; border-radius: 15px; 
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: left;
+}
+.summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
+.summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
+.rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
+.tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+.tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
+.tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+</style>
+"""
+st.markdown(custom_js, unsafe_allow_html=True)
+
+try:
+    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
+except:
+    st.error("🚨 Secrets 설정이 필요합니다.")
+    st.stop()
+
+# --- [3. 데이터 및 설정] ---
+BADGE_INFO = {
+    "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 시작이 반입니다.", "rank": 1},
+    "🥉 초보 탐조가": {"tier": "rare", "desc": "10마리 이상의 새를 만났습니다.", "rank": 2},
+    "🥈 중급 탐조가": {"tier": "epic", "desc": "30마리 이상의 새를 수집했습니다.", "rank": 3},
+    "🥇 마스터 탐조가": {"tier": "unique", "desc": "50마리 달성! 이제 새 박사님입니다.", "rank": 4},
+    "💎 전설의 탐조가": {"tier": "legendary", "desc": "100마리 달성! 당신은 살아있는 도감입니다.", "rank": 5},
     "🦆 오리 박사": {"tier": "epic", "desc": "오리과 5마리 이상 수집", "rank": 3},
     "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리과) 3마리 이상 수집", "rank": 4},
     "🦢 우아한 백로": {"tier": "epic", "desc": "백로과 3마리 이상 수집", "rank": 3},
     "🌲 숲속의 드러머": {"tier": "epic", "desc": "딱따구리과 2마리 이상 수집", "rank": 3},
-    
-    "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종 첫 발견!", "rank": 4},
-    "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 발견", "rank": 5},
+    "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종을 처음으로 발견했습니다!", "rank": 4},
+    "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종을 5마리 이상 보호(기록)했습니다.", "rank": 5},
 }
 
 RARE_BIRDS = {
@@ -46,79 +115,6 @@ RARE_BIRDS = {
     "큰소쩍새": "natural", "어치": "natural" 
 }
 RARE_LABEL = { "class1": "👑 멸종위기 1급", "class2": "⭐ 멸종위기 2급", "natural": "🌿 천연기념물" }
-
-# --- [3. CSS 스타일링 (배지 디자인 복구)] ---
-# 등급별 색상 정의
-TIER_COLORS = {
-    "rare":      {"bg": "#E3F2FD", "text": "#1565C0", "border": "#90CAF9"}, # 옅은 파랑
-    "epic":      {"bg": "#F3E5F5", "text": "#7B1FA2", "border": "#CE93D8"}, # 보라
-    "unique":    {"bg": "#FFFDE7", "text": "#F9A825", "border": "#FFF59D"}, # 노란색
-    "legendary": {"bg": "#E8F5E9", "text": "#2E7D32", "border": "#A5D6A7"}, # 초록
-}
-
-# 기본 CSS
-badge_css = """
-<style>
-/* 전체 앱 상단 여백 조정 */
-.stApp {padding-top: 10px;}
-
-/* 버튼 기본 스타일 (모든 버튼을 배지처럼) */
-div.stButton > button {
-    border-radius: 20px !important;
-    padding: 5px 10px !important;
-    font-size: 0.85rem !important;
-    font-weight: 800 !important;
-    border-width: 2px !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-    width: 100%;
-    margin-bottom: 5px;
-}
-div.stButton > button:active { transform: scale(0.95); }
-div.stButton > button:focus { outline: none; }
-
-/* 요약 박스 */
-.summary-box {
-    padding: 20px; border-radius: 15px; 
-    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-    margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: left;
-}
-.summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
-.summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
-
-/* 희귀종 태그 */
-.rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
-.tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-.tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
-.tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-
-/* 설명창(info) 스타일 */
-.stAlert { padding: 10px; margin-bottom: 10px; font-size: 0.85rem; }
-</style>
-"""
-
-# 각 배지 이름별로 색상을 입히는 CSS 자동 생성
-css_rules = ""
-for name, info in BADGE_INFO.items():
-    colors = TIER_COLORS.get(info['tier'], TIER_COLORS['rare'])
-    # aria-label 속성을 이용해 특정 텍스트를 가진 버튼만 타겟팅
-    css_rules += f"""
-    div.stButton > button[aria-label="{name}"] {{
-        background-color: {colors['bg']} !important;
-        color: {colors['text']} !important;
-        border-color: {colors['border']} !important;
-    }}
-    """
-badge_css += f"<style>{css_rules}</style>"
-st.markdown(badge_css, unsafe_allow_html=True)
-
-try:
-    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    API_KEY = st.secrets["GOOGLE_API_KEY"]
-except:
-    st.error("🚨 Secrets 설정이 필요합니다.")
-    st.stop()
-
-# --- [4. 데이터 처리 로직] ---
 
 @st.cache_data
 def load_bird_map():
@@ -215,7 +211,7 @@ def analyze_bird_image(image, user_doubt=None):
         return response.text.strip()
     except: return "Error | 분석 오류"
 
-# --- [5. 메인 앱 실행] ---
+# --- [4. 메인 앱 실행] ---
 st.title("🦅 탐조 도감")
 
 df = get_data()
@@ -231,7 +227,6 @@ if new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
 
-# 토글 상태 저장용 세션
 if 'selected_badge_desc' not in st.session_state:
     st.session_state.selected_badge_desc = {}
 
@@ -240,36 +235,46 @@ with st.sidebar:
     st.header("🏆 나의 배지")
     
     if current_badges:
-        # 배지 랭크순 정렬
         sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
         top_badges = sorted_badges[:3]
         other_badges = sorted_badges[3:]
         
-        # ⭐️ 배지 그리드 렌더링 함수
-        def render_badge_grid(badges_list, key_prefix):
-            # 2열로 배치
-            cols = st.columns(2)
-            for i, badge_name in enumerate(badges_list):
-                # 왼쪽/오른쪽 컬럼 번갈아가며 사용
-                with cols[i % 2]:
-                    # 1. 배지(버튼) 출력
-                    if st.button(badge_name, key=f"{key_prefix}_{badge_name}"):
-                        # 클릭 시 토글 (On/Off)
-                        current = st.session_state.selected_badge_desc.get(badge_name, False)
-                        st.session_state.selected_badge_desc[badge_name] = not current
-                    
-                    # 2. 버튼 바로 아래에 설명 출력 (토글 켜져있을 때만)
-                    if st.session_state.selected_badge_desc.get(badge_name, False):
-                        desc = BADGE_INFO.get(badge_name, {}).get('desc', '설명 없음')
-                        st.info(f"{desc}", icon="✅")
+        # ⭐️ 배지 그리기 함수 (중요: 버튼 바로 아래 설명 표시)
+        def render_badge_list(badges_list, key_prefix):
+            # 한 줄에 2개씩 배치
+            for i in range(0, len(badges_list), 2):
+                cols = st.columns(2)
+                # 왼쪽 배지
+                if i < len(badges_list):
+                    badge_name = badges_list[i]
+                    with cols[0]:
+                        if st.button(badge_name, key=f"{key_prefix}_{badge_name}"):
+                            # 토글 로직
+                            curr = st.session_state.selected_badge_desc.get(badge_name, False)
+                            st.session_state.selected_badge_desc[badge_name] = not curr
+                        
+                        # 버튼 바로 아래에 설명창 (다른 요소 밀어내고 나옴)
+                        if st.session_state.selected_badge_desc.get(badge_name, False):
+                            desc = BADGE_INFO.get(badge_name, {}).get('desc', '설명 없음')
+                            st.info(desc, icon="✅")
 
-        # 상위 배지 3개
-        render_badge_grid(top_badges, "top")
+                # 오른쪽 배지
+                if i + 1 < len(badges_list):
+                    badge_name = badges_list[i+1]
+                    with cols[1]:
+                        if st.button(badge_name, key=f"{key_prefix}_{badge_name}"):
+                            curr = st.session_state.selected_badge_desc.get(badge_name, False)
+                            st.session_state.selected_badge_desc[badge_name] = not curr
+                        
+                        if st.session_state.selected_badge_desc.get(badge_name, False):
+                            desc = BADGE_INFO.get(badge_name, {}).get('desc', '설명 없음')
+                            st.info(desc, icon="✅")
+
+        render_badge_list(top_badges, "top")
         
-        # 나머지 배지 (확장 패널)
         if other_badges:
             with st.expander("🔽 전체 배지 보기"):
-                render_badge_grid(other_badges, "other")
+                render_badge_list(other_badges, "other")
     else:
         st.caption("아직 배지가 없습니다.")
 
@@ -294,7 +299,6 @@ with st.sidebar:
                 </div>
             </div>""", unsafe_allow_html=True)
 
-# 메인 콘텐츠 (진행바 등)
 total_collected = len(df)
 total_species = TOTAL_SPECIES_COUNT if TOTAL_SPECIES_COUNT > 0 else 1
 progress_percent = min((total_collected / total_species) * 100, 100)
