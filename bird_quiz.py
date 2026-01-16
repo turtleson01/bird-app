@@ -220,7 +220,7 @@ def analyze_bird_image(image, user_doubt=None):
     except: return "Error | 분석 오류"
 
 # --- [4. 메인 화면] ---
-st.title("🦅 나의 탐조 도감")
+st.title("🦅 탐조 도감")
 
 # ⭐️ 메인 데이터 로드 (여기서 한 번만 읽어오고, save_data에 넘겨줍니다)
 df = get_data()
@@ -379,4 +379,5 @@ if not df.empty:
         </div>
         """, unsafe_allow_html=True)
 else: st.caption("기록이 없습니다.")
+
 
