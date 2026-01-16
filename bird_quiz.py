@@ -5,11 +5,12 @@ import google.generativeai as genai
 from PIL import Image
 from datetime import datetime
 import os
+import time
 
-# --- [1. 기본 설정] ---
+# --- [1. 기본 설정 & CSS] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 디자인 설정
+# CSS: 배지 등급별 컬러 및 디자인
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -28,28 +29,36 @@ hide_streamlit_style = """
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* 배지 및 태그 스타일 */
-            .badge-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-            .badge { background-color: #fff3e0; border: 1px solid #ffb74d; color: #ef6c00; padding: 5px 10px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            /* ⭐️ 배지 스타일 (등급별) */
+            .badge-base {
+                display: inline-block; padding: 6px 12px; border-radius: 20px; 
+                font-size: 0.9rem; font-weight: 800; margin: 4px; 
+                box-shadow: 0 3px 6px rgba(0,0,0,0.15); cursor: help;
+                transition: transform 0.2s;
+            }
+            .badge-base:hover { transform: scale(1.1); }
+            
+            /* Rare (파랑) */
+            .badge-rare { background: linear-gradient(135deg, #E3F2FD, #BBDEFB); color: #1565C0; border: 2px solid #64B5F6; }
+            /* Epic (보라) */
+            .badge-epic { background: linear-gradient(135deg, #F3E5F5, #E1BEE7); color: #7B1FA2; border: 2px solid #BA68C8; }
+            /* Unique (빨강) */
+            .badge-unique { background: linear-gradient(135deg, #FFEBEE, #FFCDD2); color: #C62828; border: 2px solid #EF5350; }
+            /* Legendary (황금) */
+            .badge-legendary { background: linear-gradient(135deg, #FFF8E1, #FFECB3); color: #F57F17; border: 2px solid #FFCA28; }
+
+            /* 희귀종 태그 */
             .rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
             .tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
             .tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
             .tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
 
-            /* 기타 스타일 */
-            .progress-container { width: 100%; background-color: #f1f3f5; border-radius: 10px; margin-bottom: 30px; height: 12px; overflow: hidden; }
-            .progress-bar { height: 100%; background-color: #66bb6a; border-radius: 10px; transition: width 0.5s ease-in-out; }
-            .sidebar-card { background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 15px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: transform 0.2s; }
-            .sidebar-card:hover { transform: translateX(3px); border-color: #81c784; }
-            .card-title { font-size: 0.95rem; font-weight: 600; color: #333; }
-            .card-stat { font-size: 0.9rem; color: #666; font-weight: 500; }
+            /* 기타 UI */
+            .sidebar-card { background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 15px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
             .stat-highlight { color: #2e7d32; font-weight: 700; }
+            div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5F6, #90CAF9); color: white !important; border: none; border-radius: 12px; padding: 0.6rem 1rem; font-weight: 700; width: 100%; box-shadow: 0 3px 5px rgba(0,0,0,0.1); }
             [data-testid="stFileUploaderDropzone"] button { display: none !important; }
             [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
-            hr { margin: 0 !important; border-top: 1px solid #eee !important; }
-            div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5F6, #90CAF9); color: white !important; border: none; border-radius: 12px; padding: 0.6rem 1rem; font-weight: 700; width: 100%; box-shadow: 0 3px 5px rgba(0,0,0,0.1); }
-            div.stButton > button[kind="secondary"] { background-color: white; color: #ff4b4b; border: 1px solid #ffcccc; border-radius: 8px; }
-            [data-testid="stSidebar"] { background-color: #fafafa; border-right: 1px solid #eee; }
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -62,6 +71,26 @@ except:
     st.stop()
 
 # --- [2. 데이터 및 족보 관리] ---
+
+# ⭐️ 배지 메타데이터 (이름, 등급, 설명, 우선순위)
+BADGE_INFO = {
+    # 수집 개수 관련
+    "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다!", "rank": 1},
+    "🥉 초보 탐조가": {"tier": "rare", "desc": "10마리 이상 수집", "rank": 2},
+    "🥈 중급 탐조가": {"tier": "epic", "desc": "30마리 이상 수집", "rank": 3},
+    "🥇 마스터 탐조가": {"tier": "unique", "desc": "50마리 이상 수집", "rank": 4},
+    "💎 전설의 탐조가": {"tier": "legendary", "desc": "100마리 이상 수집", "rank": 5},
+    
+    # 과별 관련
+    "🦆 오리 박사": {"tier": "epic", "desc": "오리과 5마리 이상 수집", "rank": 3},
+    "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리과) 3마리 이상 수집", "rank": 4},
+    "🦢 우아한 백로": {"tier": "epic", "desc": "백로과 3마리 이상 수집", "rank": 3},
+    "🌲 숲속의 드러머": {"tier": "epic", "desc": "딱따구리과 2마리 이상 수집", "rank": 3},
+    
+    # 희귀도 관련
+    "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종 첫 발견!", "rank": 4},
+    "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 발견", "rank": 5},
+}
 
 RARE_BIRDS = {
     "황새": "class1", "저어새": "class1", "노랑부리백로": "class1", "매": "class1", "흰꼬리수리": "class1",
@@ -113,12 +142,8 @@ def get_data():
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
         expected_cols = ['No', 'bird_name', 'sex', 'date']
-        
         if df.empty: return pd.DataFrame(columns=expected_cols)
-        
-        # 이전 코드와의 호환성을 위해 user_id가 있어도 무시하고 다 가져옴
         if 'sex' not in df.columns: df['sex'] = '미구분'
-
         if BIRD_MAP and 'bird_name' in df.columns:
             df['real_no'] = df['bird_name'].apply(lambda x: BIRD_MAP.get(str(x).strip(), 9999))
             df = df.sort_values(by='real_no', ascending=True)
@@ -127,23 +152,12 @@ def get_data():
 
 def save_data(bird_name, sex, current_df):
     bird_name = bird_name.strip()
-    if bird_name not in BIRD_MAP:
-        return f"⚠️ '{bird_name}'은(는) 도감 목록에 없는 이름입니다."
-
-    if not current_df.empty and bird_name in current_df['bird_name'].values:
-        return "이미 등록된 새입니다."
-        
+    if bird_name not in BIRD_MAP: return f"⚠️ '{bird_name}'은(는) 목록에 없습니다."
+    if not current_df.empty and bird_name in current_df['bird_name'].values: return "이미 등록된 새입니다."
     try:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         real_no = BIRD_MAP.get(bird_name)
-        
-        new_row = pd.DataFrame({
-            'No': [real_no], 
-            'bird_name': [bird_name], 
-            'sex': [sex], 
-            'date': [now]
-        })
-        
+        new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'sex': [sex], 'date': [now]})
         updated_df = pd.concat([current_df, new_row], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
@@ -159,12 +173,14 @@ def delete_birds(bird_names_to_delete, current_df):
 def calculate_badges(df):
     badges = []
     count = len(df)
+    # 1. 수집 개수
     if count >= 1: badges.append("🐣 탐조 입문")
     if count >= 10: badges.append("🥉 초보 탐조가")
     if count >= 30: badges.append("🥈 중급 탐조가")
     if count >= 50: badges.append("🥇 마스터 탐조가")
     if count >= 100: badges.append("💎 전설의 탐조가")
     
+    # 2. 과별
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
@@ -173,6 +189,7 @@ def calculate_badges(df):
         if fam_counts.get('백로과', 0) >= 3: badges.append("🦢 우아한 백로")
         if fam_counts.get('딱다구리과', 0) >= 2: badges.append("🌲 숲속의 드러머")
     
+    # 3. 희귀종
     rare_count = 0
     for name in df['bird_name']:
         if name in RARE_BIRDS: rare_count += 1
@@ -185,17 +202,9 @@ def analyze_bird_image(image, user_doubt=None):
     try:
         genai.configure(api_key=API_KEY)
         model = genai.GenerativeModel('gemini-2.5-flash') 
-        system_instruction = """
-        당신은 조류 전문가입니다. 사진을 분석하여 결과를 다음 형식으로 출력하세요:
-        정답형식: 종명 | 판단근거
-        [규칙]
-        1. '새이름', '종명', '이름' 같은 단어를 정답 자리에 절대 쓰지 마세요.
-        2. 구체적인 새의 이름(예: 참새, 까치)을 모른다면 차라리 '새 아님'이라고 하세요.
-        3. 새가 아닌 사진이면 '새 아님 | 새를 찾을 수 없습니다'라고 출력하세요.
-        """
+        system_instruction = "당신은 조류 전문가입니다. 사진을 분석하여 '종명 | 판단근거' 형식으로 답하세요. 구체적인 종을 모르면 '새 아님'이라고 하세요."
         prompt = f"{system_instruction}"
-        if user_doubt:
-            prompt += f"\n사용자 반론: '{user_doubt}'. 이를 참고하여 다시 분석하세요."
+        if user_doubt: prompt += f"\n사용자 반론: '{user_doubt}'. 재분석하세요."
         response = model.generate_content([prompt, image])
         return response.text.strip()
     except: return "Error | 분석 오류"
@@ -205,16 +214,59 @@ st.title("🦅 탐조 도감")
 
 df = get_data()
 
+# ⭐️ [신규] 배지 계산 및 축하 로직
+current_badges = calculate_badges(df)
+
+# 세션 상태에 이전 배지 목록이 없으면 초기화
+if 'my_badges' not in st.session_state:
+    st.session_state['my_badges'] = current_badges
+
+# 새로운 배지가 생겼는지 확인
+new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
+if new_badges:
+    st.balloons() # 🎉 축하 풍선
+    for nb in new_badges:
+        st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
+    # 상태 업데이트
+    st.session_state['my_badges'] = current_badges
+
 # 사이드바
 with st.sidebar:
     st.header("🏆 나의 배지")
-    my_badges = calculate_badges(df)
-    if my_badges:
-        st.markdown('<div class="badge-container">', unsafe_allow_html=True)
-        for b in my_badges:
-            st.markdown(f'<span class="badge">{b}</span>', unsafe_allow_html=True)
+    
+    if current_badges:
+        # 1. 배지 정렬 (랭크 높은 순)
+        # key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0) -> 랭크 점수로 내림차순 정렬
+        sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
+        
+        # 2. 상위 3개만 먼저 보여주기
+        top_badges = sorted_badges[:3]
+        other_badges = sorted_badges[3:]
+        
+        # 상위 배지 출력 함수
+        def draw_badge(badge_name):
+            info = BADGE_INFO.get(badge_name, {"tier": "rare", "desc": "정보 없음"})
+            tier_class = f"badge-{info['tier']}" # CSS 클래스
+            desc = info['desc']
+            st.markdown(f'''
+            <div class="badge-base {tier_class}" title="조건: {desc}">
+                {badge_name}
+            </div>
+            ''', unsafe_allow_html=True)
+
+        st.markdown('<div style="margin-bottom:10px;">', unsafe_allow_html=True)
+        for b in top_badges:
+            draw_badge(b)
         st.markdown('</div>', unsafe_allow_html=True)
-    else: st.caption("아직 획득한 배지가 없습니다.")
+        
+        # 3. 나머지는 확장 패널(Expander)로 숨기기
+        if other_badges:
+            with st.expander(f"🔽 보유 배지 전체 보기 ({len(other_badges)}개 더 있음)"):
+                for b in other_badges:
+                    draw_badge(b)
+    else:
+        st.caption("아직 배지가 없습니다. 도감을 채워보세요!")
+
     st.divider()
     
     st.header("📊 과별 수집 현황")
@@ -265,7 +317,7 @@ with tab1:
             if res is True: 
                 msg = f"✅ {name}({sex}) 등록 완료!"
                 if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
-                st.toast(msg)
+                st.toast(msg); st.rerun()
             else: st.toast(f"🚫 {res}")
     st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
 
@@ -317,10 +369,7 @@ with tab2:
                             if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                                 res = save_data(bird_name, ai_sex, df)
                                 if res is True: 
-                                    st.balloons()
-                                    msg = f"🎉 {bird_name}({ai_sex}) 등록 성공!"
-                                    if bird_name in RARE_BIRDS: msg += " (대박! 희귀종이에요!)"
-                                    st.toast(msg); st.rerun()
+                                    st.toast(f"🎉 {bird_name}({ai_sex}) 등록 성공!"); st.rerun()
                                 else: st.error(res)
                     else:
                         st.warning(f"⚠️ **{bird_name}**")
