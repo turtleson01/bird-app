@@ -7,7 +7,6 @@ from datetime import datetime
 import os
 
 # --- [1. 기본 설정] ---
-# ⭐️ [수정] 제목 변경: "탐조 도감"
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
 # CSS: 디자인 설정
@@ -166,7 +165,6 @@ def get_data():
         if df.empty: 
             return pd.DataFrame(columns=expected_cols)
         
-        # 이전 데이터 호환성: sex 컬럼 없으면 '미구분'으로 채움
         if 'sex' not in df.columns:
             df['sex'] = '미구분'
 
@@ -176,7 +174,6 @@ def get_data():
         return df
     except: return pd.DataFrame(columns=['No', 'bird_name', 'sex', 'date'])
 
-# ⭐️ [성별 저장 기능 추가]
 def save_data(bird_name, sex, current_df):
     bird_name = bird_name.strip()
     
@@ -230,7 +227,6 @@ def analyze_bird_image(image, user_doubt=None):
     except: return "Error | 분석 오류"
 
 # --- [4. 메인 화면] ---
-# ⭐️ [수정] 제목 변경
 st.title("🦅 탐조 도감")
 
 df = get_data()
@@ -286,14 +282,14 @@ st.markdown(f"""
 tab1, tab2, tab3 = st.tabs(["✍️ 직접 입력", "📸 AI 분석", "🛠️ 기록 관리"])
 
 with tab1:
-    st.subheader("새 이름 직접 기록")
+    # ⭐️ [수정] 텍스트 변경
+    st.subheader("종 추가하기")
     
-    # ⭐️ 성별 선택을 위한 Radio 버튼 (가로 배치)
     sex_selection = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key="manual_sex")
 
     def add_manual():
         name = st.session_state.input_bird.strip()
-        sex = st.session_state.manual_sex # 선택된 성별 가져오기
+        sex = st.session_state.manual_sex 
         st.session_state.input_bird = ""
         
         if name:
@@ -344,7 +340,6 @@ with tab2:
                         st.markdown(f"**🔍 판단 이유**")
                         st.info(reason)
                         
-                        # ⭐️ AI 분석 결과창에도 성별 선택 추가
                         col_sex, col_btn = st.columns([1, 1])
                         with col_sex:
                             ai_sex = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key=f"sex_{file.name}", label_visibility="collapsed")
@@ -387,7 +382,6 @@ if not df.empty:
         real_no = BIRD_MAP.get(bird, 9999)
         display_no = "??" if real_no == 9999 else real_no
         
-        # ⭐️ 성별 표시 아이콘
         sex_info = row.get('sex', '미구분')
         sex_icon = ""
         if sex_info == '수컷': sex_icon = " <span style='color:blue; font-size:1rem;'>(♂)</span>"
