@@ -10,7 +10,7 @@ import time
 # --- [1. 기본 설정 & CSS] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
-# CSS: 배지 등급별 컬러 및 디자인
+# CSS: 배지 등급별 컬러 및 디자인 (요청하신 색상 반영)
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -29,23 +29,27 @@ hide_streamlit_style = """
             .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
             .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
             
-            /* ⭐️ 배지 스타일 (등급별) */
+            /* ⭐️ 배지 스타일 (등급별 색상 수정됨) */
             .badge-base {
                 display: inline-block; padding: 6px 12px; border-radius: 20px; 
                 font-size: 0.9rem; font-weight: 800; margin: 4px; 
-                box-shadow: 0 3px 6px rgba(0,0,0,0.15); cursor: help;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1); cursor: help;
                 transition: transform 0.2s;
+                position: relative; /* 툴팁 위치용 */
             }
-            .badge-base:hover { transform: scale(1.1); }
+            .badge-base:hover { transform: scale(1.1); z-index: 10; }
             
-            /* Rare (파랑) */
-            .badge-rare { background: linear-gradient(135deg, #E3F2FD, #BBDEFB); color: #1565C0; border: 2px solid #64B5F6; }
-            /* Epic (보라) */
-            .badge-epic { background: linear-gradient(135deg, #F3E5F5, #E1BEE7); color: #7B1FA2; border: 2px solid #BA68C8; }
-            /* Unique (빨강) */
-            .badge-unique { background: linear-gradient(135deg, #FFEBEE, #FFCDD2); color: #C62828; border: 2px solid #EF5350; }
-            /* Legendary (황금) */
-            .badge-legendary { background: linear-gradient(135deg, #FFF8E1, #FFECB3); color: #F57F17; border: 2px solid #FFCA28; }
+            /* Rare: 옅은 파랑 */
+            .badge-rare { background: #E3F2FD; color: #1565C0; border: 2px solid #90CAF9; }
+            
+            /* Epic: 보라 */
+            .badge-epic { background: #F3E5F5; color: #7B1FA2; border: 2px solid #CE93D8; }
+            
+            /* Unique: 노랑 (변경) */
+            .badge-unique { background: #FFFDE7; color: #F9A825; border: 2px solid #FFF59D; }
+            
+            /* Legendary: 초록 (변경) */
+            .badge-legendary { background: #E8F5E9; color: #2E7D32; border: 2px solid #A5D6A7; }
 
             /* 희귀종 태그 */
             .rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
@@ -214,20 +218,17 @@ st.title("🦅 탐조 도감")
 
 df = get_data()
 
-# ⭐️ [신규] 배지 계산 및 축하 로직
+# ⭐️ 배지 계산 및 축하 로직
 current_badges = calculate_badges(df)
 
-# 세션 상태에 이전 배지 목록이 없으면 초기화
 if 'my_badges' not in st.session_state:
     st.session_state['my_badges'] = current_badges
 
-# 새로운 배지가 생겼는지 확인
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
-    st.balloons() # 🎉 축하 풍선
+    st.balloons()
     for nb in new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
-    # 상태 업데이트
     st.session_state['my_badges'] = current_badges
 
 # 사이드바
@@ -235,21 +236,17 @@ with st.sidebar:
     st.header("🏆 나의 배지")
     
     if current_badges:
-        # 1. 배지 정렬 (랭크 높은 순)
-        # key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0) -> 랭크 점수로 내림차순 정렬
         sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
-        
-        # 2. 상위 3개만 먼저 보여주기
         top_badges = sorted_badges[:3]
         other_badges = sorted_badges[3:]
         
-        # 상위 배지 출력 함수
         def draw_badge(badge_name):
-            info = BADGE_INFO.get(badge_name, {"tier": "rare", "desc": "정보 없음"})
-            tier_class = f"badge-{info['tier']}" # CSS 클래스
+            info = BADGE_INFO.get(badge_name, {"tier": "rare", "desc": "설명 없음"})
+            tier_class = f"badge-{info['tier']}"
             desc = info['desc']
+            # title 속성을 사용하여 마우스 오버 시 설명 표시
             st.markdown(f'''
-            <div class="badge-base {tier_class}" title="조건: {desc}">
+            <div class="badge-base {tier_class}" title="{desc}">
                 {badge_name}
             </div>
             ''', unsafe_allow_html=True)
@@ -259,13 +256,13 @@ with st.sidebar:
             draw_badge(b)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # 3. 나머지는 확장 패널(Expander)로 숨기기
+        # ⭐️ 텍스트 수정: (개수) 삭제하고 깔끔하게
         if other_badges:
-            with st.expander(f"🔽 보유 배지 전체 보기 ({len(other_badges)}개 더 있음)"):
+            with st.expander("🔽 보유 배지 전체 보기"):
                 for b in other_badges:
                     draw_badge(b)
     else:
-        st.caption("아직 배지가 없습니다. 도감을 채워보세요!")
+        st.caption("아직 배지가 없습니다.")
 
     st.divider()
     
