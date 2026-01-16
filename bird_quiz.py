@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 
 # --- [1. 기본 설정] ---
+# ⭐️ [수정] 제목 변경: "탐조 도감"
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
 # CSS: 디자인 설정
@@ -76,7 +77,7 @@ hide_streamlit_style = """
                 font-weight: 700;
             }
             
-            /* 파일 업로더 버튼 숨기기 (X버튼은 살림) */
+            /* 파일 업로더 버튼 숨기기 */
             [data-testid="stFileUploaderDropzone"] button { display: none !important; }
             [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
 
@@ -140,6 +141,7 @@ def load_bird_map():
             filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
 
+            # 전체 종 수 (엑셀 줄 수 그대로 602종)
             total_species_count = len(bird_data)
 
             bird_list = bird_data['name'].tolist()
@@ -158,35 +160,43 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
     try:
-        # ttl=0은 유지하되, 이 함수는 '화면 갱신' 용도로만 씁니다.
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        if df.empty: return pd.DataFrame(columns=['No', 'bird_name', 'date'])
+        expected_cols = ['No', 'bird_name', 'sex', 'date']
+        
+        if df.empty: 
+            return pd.DataFrame(columns=expected_cols)
+        
+        # 이전 데이터 호환성: sex 컬럼 없으면 '미구분'으로 채움
+        if 'sex' not in df.columns:
+            df['sex'] = '미구분'
+
         if BIRD_MAP and 'bird_name' in df.columns:
             df['real_no'] = df['bird_name'].apply(lambda x: BIRD_MAP.get(str(x).strip(), 9999))
             df = df.sort_values(by='real_no', ascending=True)
         return df
-    except: return pd.DataFrame(columns=['No', 'bird_name', 'date'])
+    except: return pd.DataFrame(columns=['No', 'bird_name', 'sex', 'date'])
 
-# ⭐️ [속도 최적화] save_data가 현재 로드된 df를 인자로 받습니다.
-# 다시 get_data()를 호출하지 않아 인터넷 통신을 1회 줄입니다.
-def save_data(bird_name, current_df):
+# ⭐️ [성별 저장 기능 추가]
+def save_data(bird_name, sex, current_df):
     bird_name = bird_name.strip()
     
-    # 1. 족보 체크 (로컬)
     if bird_name not in BIRD_MAP:
         return f"⚠️ '{bird_name}'은(는) 도감 목록에 없는 이름입니다."
         
-    # 2. 중복 체크 (로컬 데이터프레임 이용)
     if not current_df.empty and bird_name in current_df['bird_name'].values:
         return "이미 등록된 새입니다."
         
     try:
-        # 3. 저장 (쓰기만 수행)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         real_no = BIRD_MAP.get(bird_name)
-        new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'date': [now]})
         
-        # 기존 df에 붙여서 통째로 업데이트
+        new_row = pd.DataFrame({
+            'No': [real_no], 
+            'bird_name': [bird_name], 
+            'sex': [sex], 
+            'date': [now]
+        })
+        
         updated_df = pd.concat([current_df, new_row], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
@@ -220,9 +230,9 @@ def analyze_bird_image(image, user_doubt=None):
     except: return "Error | 분석 오류"
 
 # --- [4. 메인 화면] ---
+# ⭐️ [수정] 제목 변경
 st.title("🦅 탐조 도감")
 
-# ⭐️ 메인 데이터 로드 (여기서 한 번만 읽어오고, save_data에 넘겨줍니다)
 df = get_data()
 
 # 사이드바
@@ -277,19 +287,19 @@ tab1, tab2, tab3 = st.tabs(["✍️ 직접 입력", "📸 AI 분석", "🛠️ �
 
 with tab1:
     st.subheader("새 이름 직접 기록")
+    
+    # ⭐️ 성별 선택을 위한 Radio 버튼 (가로 배치)
+    sex_selection = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key="manual_sex")
+
     def add_manual():
-        # 1. 입력값 가져오기
         name = st.session_state.input_bird.strip()
-        # 2. 입력창 즉시 비우기
+        sex = st.session_state.manual_sex # 선택된 성별 가져오기
         st.session_state.input_bird = ""
         
         if name:
-            # ⭐️ [핵심] 현재 로드된 df를 인자로 넘겨서 '읽기' 과정을 생략
-            res = save_data(name, df)
+            res = save_data(name, sex, df)
             if res is True: 
-                st.toast(f"✅ {name} 등록 완료!")
-                # 성공 시 페이지 리로드 (데이터 갱신)
-                # 약간의 딜레이가 있더라도 입력창은 이미 비워졌으므로 사용자는 다음 입력 가능
+                st.toast(f"✅ {name}({sex}) 등록 완료!")
             else: 
                 st.toast(f"🚫 {res}")
                 
@@ -333,14 +343,19 @@ with tab2:
                         st.markdown(f"### **{bird_name}**")
                         st.markdown(f"**🔍 판단 이유**")
                         st.info(reason)
-                        if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
-                            # AI 분석에서도 df 넘겨주기
-                            res = save_data(bird_name, df)
-                            if res is True: 
-                                st.balloons()
-                                st.toast(f"🎉 {bird_name} 등록 성공!")
-                                st.rerun()
-                            else: st.error(res)
+                        
+                        # ⭐️ AI 분석 결과창에도 성별 선택 추가
+                        col_sex, col_btn = st.columns([1, 1])
+                        with col_sex:
+                            ai_sex = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key=f"sex_{file.name}", label_visibility="collapsed")
+                        with col_btn:
+                            if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
+                                res = save_data(bird_name, ai_sex, df)
+                                if res is True: 
+                                    st.balloons()
+                                    st.toast(f"🎉 {bird_name}({ai_sex}) 등록 성공!")
+                                    st.rerun()
+                                else: st.error(res)
                     else:
                         st.warning(f"⚠️ **{bird_name}**")
                         st.write(reason)
@@ -360,7 +375,6 @@ with tab3:
         to_delete = st.multiselect("삭제할 기록 선택", options=df['bird_name'].tolist(), placeholder="도감에서 삭제할 새 이름을 입력하세요")
         if to_delete:
             if st.button(f"🗑️ 선택한 {len(to_delete)}개 삭제하기", type="primary"):
-                # 삭제 함수에도 df 넘겨주기
                 if delete_birds(to_delete, df) is True:
                     st.success("삭제되었습니다."); st.rerun()
     else: st.info("등록된 기록이 없습니다.")
@@ -372,12 +386,17 @@ if not df.empty:
         bird = row['bird_name']
         real_no = BIRD_MAP.get(bird, 9999)
         display_no = "??" if real_no == 9999 else real_no
+        
+        # ⭐️ 성별 표시 아이콘
+        sex_info = row.get('sex', '미구분')
+        sex_icon = ""
+        if sex_info == '수컷': sex_icon = " <span style='color:blue; font-size:1rem;'>(♂)</span>"
+        elif sex_info == '암컷': sex_icon = " <span style='color:red; font-size:1rem;'>(♀)</span>"
+        
         st.markdown(f"""
         <div style="display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:8px 0; border-bottom:1px solid #eee;">
             <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
-            <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}</span>
+            <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
         </div>
         """, unsafe_allow_html=True)
 else: st.caption("기록이 없습니다.")
-
-
