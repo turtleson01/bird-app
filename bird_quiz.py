@@ -79,10 +79,11 @@ footer {visibility: hidden;}
     align-items: center;
     padding: 4px 10px;
     border-radius: 15px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 700;
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     white-space: nowrap;
+    margin-bottom: 4px;
 }
 
 /* 탭 스타일 */
@@ -213,6 +214,7 @@ st.title("🦅 탐조 도감")
 df = get_data()
 current_badges = calculate_badges(df)
 
+# 배지 획득 알림
 if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
@@ -221,13 +223,14 @@ if new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
 
-# --- ⭐️ 사이드바 (1번 사진처럼 옹기종기 스타일로 복구) ---
+# --- ⭐️ 사이드바 (HTML 코드 출력 문제 해결) ---
 with st.sidebar:
     st.header("🏆 획득 배지")
     
     if current_badges:
-        # 배지 목록을 HTML로 생성 (flex-wrap 사용)
-        badge_html = '<div class="sidebar-badge-container">'
+        # ⭐️ 중요: 들여쓰기 없는 깔끔한 문자열로 생성
+        badge_html_parts = []
+        badge_html_parts.append('<div class="sidebar-badge-container">')
         
         # 랭크순 정렬
         sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
@@ -235,14 +238,14 @@ with st.sidebar:
         for badge_name in sorted_badges:
             info = BADGE_INFO.get(badge_name, {"tier": "rare"})
             style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-            # 알약 모양 디자인
-            badge_html += f"""
-            <span class="sidebar-badge" style="background-color: {style['bg']}; color: {style['color']}; border: 1px solid {style['color']}40;">
-                {style['icon']} {badge_name}
-            </span>
-            """
-        badge_html += '</div>'
-        st.markdown(badge_html, unsafe_allow_html=True)
+            # 들여쓰기 제거하고 한 줄로 작성
+            tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
+            badge_html_parts.append(tag)
+            
+        badge_html_parts.append('</div>')
+        final_html = "".join(badge_html_parts)
+        
+        st.markdown(final_html, unsafe_allow_html=True)
     else:
         st.caption("획득한 배지가 없습니다.")
     
@@ -360,7 +363,6 @@ with tab2:
                                 st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
                                 st.rerun()
 
-# ⭐️ 배지 도감 탭
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
@@ -372,7 +374,6 @@ with tab3:
         is_earned = badge_name in current_badges
         style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
         
-        # 획득 여부에 따른 스타일
         opacity = "1.0" if is_earned else "0.5"
         grayscale = "0%" if is_earned else "100%"
         border_color = style['color'] if is_earned else "#e0e0e0"
