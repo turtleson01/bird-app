@@ -31,11 +31,12 @@ BADGE_INFO = {
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 기록. 당신은 자연의 지킴이입니다.", "rank": 5},
 }
 
+# ⭐️ [수정완료] border 키가 다시 추가되었습니다!
 TIER_STYLE = {
-    "rare":      {"color": "#1565C0", "bg": "#E3F2FD", "icon": "🔹", "label": "Rare"},
-    "epic":      {"color": "#6A1B9A", "bg": "#F3E5F5", "icon": "🔮", "label": "Epic"},
-    "unique":    {"color": "#EF6C00", "bg": "#FFF3E0", "icon": "🌟", "label": "Unique"},
-    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "icon": "🌿", "label": "Legendary"},
+    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "icon": "🔹", "label": "Rare"},
+    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "icon": "🔮", "label": "Epic"},
+    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "icon": "🌟", "label": "Unique"},
+    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "icon": "🌿", "label": "Legendary"},
 }
 
 RARE_BIRDS = {
@@ -167,7 +168,6 @@ def calculate_badges(df):
     badges = []
     count = len(df)
     
-    # 1. 수집 개수
     if count >= 1: badges.append("🐣 탐조 입문")
     if count >= 5: badges.append("🌱 새싹 탐조가")
     if count >= 20: badges.append("🥉 아마추어 탐조가")
@@ -175,7 +175,6 @@ def calculate_badges(df):
     if count >= 100: badges.append("🥇 마스터 탐조가")
     if count >= 300: badges.append("💎 전설의 탐조가")
     
-    # 2. 과별
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
@@ -192,7 +191,6 @@ def calculate_badges(df):
         if fam_counts.get('박새과', 0) >= 3: badges.append("👔 넥타이 신사")
         if fam_counts.get('도요과', 0) >= 5: badges.append("🏖️ 갯벌의 나그네")
     
-    # 3. 희귀종
     rare_count = 0
     for name in df['bird_name']:
         if name in RARE_BIRDS: rare_count += 1
@@ -237,7 +235,6 @@ with st.sidebar:
         top_badges = sorted_badges[:3]
         other_badges = sorted_badges[3:]
         
-        # 3. 상위 배지 렌더링
         for badge_name in top_badges:
             info = BADGE_INFO.get(badge_name, {"tier": "rare"})
             style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
@@ -246,7 +243,6 @@ with st.sidebar:
         badge_html_parts.append('</div>')
         st.markdown("".join(badge_html_parts), unsafe_allow_html=True)
         
-        # 4. 나머지는 Expander로 숨김
         if other_badges:
             with st.expander("🔽 보유 배지 전체 보기"):
                 extra_html = '<div class="sidebar-badge-container">'
@@ -314,7 +310,7 @@ with tab1:
                 if res is True: 
                     msg = f"✅ {name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
-                    st.toast(msg) # ⭐️ st.rerun() 제거 (자동 새로고침됨)
+                    st.toast(msg)
                 else: st.toast(f"🚫 {res}")
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
@@ -416,46 +412,58 @@ with tab2:
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
-    
     sorted_badges = sorted(BADGE_INFO.keys(), key=lambda x: BADGE_INFO[x]['rank'])
-    
     for badge_name in sorted_badges:
         info = BADGE_INFO[badge_name]
         is_earned = badge_name in current_badges
         style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
         
-        # 1. 이름 분리 (아이콘/텍스트)
+        # 이름 분리
         parts = badge_name.split(" ", 1)
         icon_emoji = parts[0] if len(parts) > 0 else "🏅"
         clean_name = parts[1] if len(parts) > 1 else badge_name
         
-        # 2. 스타일 결정
-        border_color = style['border'] if is_earned else "#e0e0e0"
+        # 스타일 결정
+        border_color = style.get('border', '#e0e0e0') # 안전하게 가져오기
         bg_color = style['bg'] if is_earned else "#ffffff"
         opacity = "1.0" if is_earned else "0.6"
         grayscale = "0%" if is_earned else "100%"
         text_color = "#333333" if is_earned else "#999999"
         
-        # 3. HTML 카드 렌더링
-        st.markdown(f"""
-        <div style="
-            border: 2px solid {border_color};
-            background-color: {bg_color};
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            opacity: {opacity};
-            filter: grayscale({grayscale});
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        ">
-            <div style="font-size: 3rem; margin-right: 15px;">{icon_emoji}</div>
-            <div>
-                <div style="font-weight: bold; font-size: 1.1rem; color: {text_color};">
-                    {clean_name} <span style="font-size: 0.8rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 5px; padding: 2px 5px; margin-left: 5px;">{style['label']}</span>
+        with st.container(border=True):
+            c1, c2 = st.columns([0.25, 0.75])
+            with c1:
+                st.markdown(f"""
+                <div style="
+                    display: flex; justify-content: center; align-items: center;
+                    width: 70px; height: 70px;
+                    border-radius: 50%;
+                    border: 3px solid {style['color']};
+                    background-color: {style['bg']};
+                    font-size: 35px;
+                    opacity: {opacity};
+                    filter: grayscale({grayscale});
+                    margin: auto;
+                ">
+                    {icon_emoji}
                 </div>
-                <div style="font-size: 0.9rem; color: #666;">{info['desc']}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"""
+                <div style="
+                    border: 2px solid {border_color};
+                    background-color: {bg_color};
+                    border-radius: 10px;
+                    padding: 10px;
+                    opacity: {opacity};
+                    filter: grayscale({grayscale});
+                ">
+                    <div style="font-weight: bold; font-size: 1.1rem; color: {text_color}; margin-bottom: 4px;">
+                        {clean_name} 
+                        <span style="font-size: 0.75rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 6px; padding: 2px 6px; margin-left: 6px; vertical-align: middle;">
+                            {style['label']}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #666; line-height: 1.4;">{info['desc']}</div>
+                </div>
+                """, unsafe_allow_html=True)
