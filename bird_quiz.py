@@ -11,24 +11,31 @@ st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="🦅")
 
 # --- [2. 데이터 및 설정] ---
 
-# ⭐️ 배지 난이도 상향 및 신규 추가
+# ⭐️ 배지 밸런스 패치 (난이도 상향)
 BADGE_INFO = {
-    # [수집 개수 - 난이도 상향]
-    "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 위대한 여정의 시작.", "rank": 1},
-    "🌱 새싹 탐조가": {"tier": "rare", "desc": "5마리의 새를 만났습니다. 이제 도감이 채워지기 시작합니다.", "rank": 1.5},
+    # [수집 개수]
+    "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 시작이 반입니다.", "rank": 1},
+    "🌱 새싹 탐조가": {"tier": "rare", "desc": "5마리의 새를 만났습니다.", "rank": 1.5},
     "🥉 아마추어 탐조가": {"tier": "rare", "desc": "20마리 수집! 동네 새들은 다 꿰뚫고 계시군요.", "rank": 2},
     "🥈 베테랑 탐조가": {"tier": "epic", "desc": "50마리 수집! 어디 가서 '새 좀 안다'고 하셔도 됩니다.", "rank": 3},
-    "🥇 마스터 탐조가": {"tier": "unique", "desc": "100마리 수집! 존경합니다, 박사님.", "rank": 4},
-    "💎 전설의 탐조가": {"tier": "legendary", "desc": "300마리 수집! 당신은 살아있는 도감 그 자체입니다.", "rank": 5},
     
-    # [다양성 - 신규]
-    "🌈 다채로운 시선": {"tier": "unique", "desc": "10개 이상의 서로 다른 '과(Family)'를 기록했습니다. 편식 없는 탐조!", "rank": 4},
+    # 🔥 유니크 난이도 상향 (50 -> 100)
+    "🥇 마스터 탐조가": {"tier": "unique", "desc": "100마리 달성! 진정한 고수의 반열에 올랐습니다.", "rank": 4},
+    "💎 전설의 탐조가": {"tier": "legendary", "desc": "300마리 달성! 당신은 살아있는 도감 그 자체입니다.", "rank": 5},
+    
+    # [다양성]
+    # 🔥 유니크 난이도 상향 (10과 -> 15과)
+    "🌈 다채로운 시선": {"tier": "unique", "desc": "15개 이상의 서로 다른 '과(Family)'를 기록했습니다. 편식 없는 탐조!", "rank": 4},
 
-    # [과별 수집 - 조건 강화]
-    "🦆 호수의 지배자": {"tier": "epic", "desc": "오리과 15마리 이상 수집 (난이도 상향)", "rank": 3},
-    "👑 왕의 자질": {"tier": "legendary", "desc": "맹금류(수리과/매과) 10마리 이상 수집. 하늘의 제왕들을 정복했습니다.", "rank": 5},
+    # [과별 수집]
+    "🦆 호수의 지배자": {"tier": "epic", "desc": "오리과 10마리 이상 수집", "rank": 3},
+    
+    # 🔥 유니크 난이도 상향 (3마리 -> 5마리)
+    "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리과/매과) 5마리 이상 수집. 하늘의 포식자들을 정복했습니다.", "rank": 4},
+    
     "🦢 우아한 백로": {"tier": "epic", "desc": "백로/왜가리과 5마리 이상 수집", "rank": 3},
     "🌲 숲속의 드러머": {"tier": "epic", "desc": "딱따구리과 3마리 이상 수집", "rank": 3},
+    
     "🦉 밤의 추적자": {"tier": "unique", "desc": "올빼미과(부엉이 등) 발견. 밤에도 탐조하는 열정!", "rank": 4},
     "🧠 똑똑한 새": {"tier": "rare", "desc": "까마귀과(까치, 어치 등) 3마리 이상 수집", "rank": 2},
     "👔 넥타이 신사": {"tier": "rare", "desc": "박새과 3마리 이상 수집", "rank": 2},
@@ -79,7 +86,6 @@ footer {visibility: hidden;}
 .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
 .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
 
-/* 사이드바 배지 컨테이너 */
 .sidebar-badge-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .sidebar-badge {
     display: inline-flex; align-items: center; padding: 4px 10px;
@@ -176,12 +182,12 @@ def calculate_badges(df):
     badges = []
     count = len(df)
     
-    # 1. 수집 개수 (난이도 상향 적용)
+    # 1. 수집 개수 (난이도 패치 적용)
     if count >= 1: badges.append("🐣 탐조 입문")
     if count >= 5: badges.append("🌱 새싹 탐조가")
     if count >= 20: badges.append("🥉 아마추어 탐조가")
     if count >= 50: badges.append("🥈 베테랑 탐조가")
-    if count >= 100: badges.append("🥇 마스터 탐조가")
+    if count >= 100: badges.append("🥇 마스터 탐조가") # 50 -> 100 상향
     if count >= 300: badges.append("💎 전설의 탐조가")
     
     # 2. 과별 & 특수 조건
@@ -189,22 +195,22 @@ def calculate_badges(df):
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
         
-        # 다양성 배지 (서로 다른 과 개수)
+        # 다양성 배지 (10 -> 15 상향)
         unique_families = df['family'].nunique()
-        if unique_families >= 10: badges.append("🌈 다채로운 시선")
+        if unique_families >= 15: badges.append("🌈 다채로운 시선")
         
-        if fam_counts.get('오리과', 0) >= 15: badges.append("🦆 호수의 지배자")
+        if fam_counts.get('오리과', 0) >= 10: badges.append("🦆 호수의 지배자")
         
-        # 맹금류 통합 (수리과 + 매과)
+        # 맹금류 통합 (수리과 + 매과) (3 -> 5 상향)
         raptor_count = fam_counts.get('수리과', 0) + fam_counts.get('매과', 0)
-        if raptor_count >= 10: badges.append("👑 왕의 자질")
+        if raptor_count >= 5: badges.append("👑 왕의 자질")
         
         if fam_counts.get('백로과', 0) >= 5: badges.append("🦢 우아한 백로")
         if fam_counts.get('딱다구리과', 0) >= 3: badges.append("🌲 숲속의 드러머")
         if fam_counts.get('올빼미과', 0) >= 1: badges.append("🦉 밤의 추적자")
         if fam_counts.get('까마귀과', 0) >= 3: badges.append("🧠 똑똑한 새")
         if fam_counts.get('박새과', 0) >= 3: badges.append("👔 넥타이 신사")
-        if fam_counts.get('도요과', 0) >= 5: badges.append("🏖️ 갯벌의 나그네") # 도요과는 보통 '도요과'로 분류됨
+        if fam_counts.get('도요과', 0) >= 5: badges.append("🏖️ 갯벌의 나그네")
     
     # 3. 희귀종
     rare_count = 0
@@ -239,38 +245,42 @@ if new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
 
-# --- ⭐️ 사이드바 (상위 3개만 노출 + 전체보기) ---
+# 사이드바
 with st.sidebar:
     st.header("🏆 획득 배지")
     
     if current_badges:
+        badge_html_parts = []
+        badge_html_parts.append('<div class="sidebar-badge-container">')
+        
         # 1. 랭크순(희귀도순) 정렬
         sorted_badges = sorted(current_badges, key=lambda x: BADGE_INFO.get(x, {}).get('rank', 0), reverse=True)
         
-        # 2. 상위 3개와 나머지 분리
-        top_3_badges = sorted_badges[:3]
+        # 2. 상위 3개만 추출
+        top_badges = sorted_badges[:3]
         other_badges = sorted_badges[3:]
         
-        # 3. 배지 HTML 생성 함수
-        def create_badge_html(badges):
-            html = '<div class="sidebar-badge-container">'
-            for badge_name in badges:
-                info = BADGE_INFO.get(badge_name, {"tier": "rare"})
-                style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-                html += f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
-            html += '</div>'
-            return html
-
-        # 상위 3개 출력
-        st.markdown(create_badge_html(top_3_badges), unsafe_allow_html=True)
+        # 3. 상위 배지 렌더링
+        for badge_name in top_badges:
+            info = BADGE_INFO.get(badge_name, {"tier": "rare"})
+            style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
+            tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
+            badge_html_parts.append(tag)
+        badge_html_parts.append('</div>')
+        st.markdown("".join(badge_html_parts), unsafe_allow_html=True)
         
-        # 나머지는 Expander로 숨김
+        # 4. 나머지는 Expander로 숨김
         if other_badges:
             with st.expander("🔽 보유 배지 전체 보기"):
-                st.markdown(create_badge_html(other_badges), unsafe_allow_html=True)
-                
+                extra_html = '<div class="sidebar-badge-container">'
+                for badge_name in other_badges:
+                    info = BADGE_INFO.get(badge_name, {"tier": "rare"})
+                    style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
+                    extra_html += f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
+                extra_html += '</div>'
+                st.markdown(extra_html, unsafe_allow_html=True)
     else:
-        st.caption("아직 획득한 배지가 없습니다.")
+        st.caption("획득한 배지가 없습니다.")
     
     st.divider()
     st.header("📊 과별 수집 현황")
@@ -391,7 +401,6 @@ with tab3:
         style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
         opacity = "1.0" if is_earned else "0.5"
         grayscale = "0%" if is_earned else "100%"
-        border_color = style['color'] if is_earned else "#e0e0e0"
         status_msg = "✅ 획득 완료!" if is_earned else "🔒 미획득"
         with st.container(border=True):
             c1, c2 = st.columns([0.2, 0.8])
