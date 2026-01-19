@@ -12,17 +12,17 @@ from streamlit_lottie import st_lottie
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
 
 # ⭐️ [CSS 추가] Lottie 애니메이션을 화면 전체 오버레이로 만드는 스타일
-# 이 코드가 있어야 폭죽이 칸을 차지하지 않고 화면 위에 뜹니다.
+# pointer-events: none 덕분에 폭죽이 터져도 뒤에 있는 버튼을 누를 수 있습니다.
 st.markdown("""
 <style>
 iframe[title="streamlit_lottie.st_lottie"] {
-    position: fixed; /* 화면에 고정 */
+    position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;  /* 화면 전체 너비 */
-    height: 100vh; /* 화면 전체 높이 */
-    z-index: 99;   /* 다른 요소보다 위에 배치 */
-    pointer-events: none; /* 클릭은 뒤로 통과시킴 (중요!) */
+    width: 100vw;
+    height: 100vh;
+    z-index: 99;
+    pointer-events: none;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -30,12 +30,15 @@ iframe[title="streamlit_lottie.st_lottie"] {
 # Lottie 로드 함수
 @st.cache_data
 def load_lottieurl(url: str):
-    r = requests.get(url)
-    if r.status_code != 200:
+    try:
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
         return None
-    return r.json()
 
-# 폭죽 URL
+# 폭죽 URL (화려한 폭죽)
 lottie_fireworks = load_lottieurl("https://assets6.lottiefiles.com/packages/lf20_rovf9gzu.json")
 
 # --- [2. 데이터 및 설정] ---
@@ -60,11 +63,12 @@ BADGE_INFO = {
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 기록. 당신은 자연의 지킴이입니다.", "rank": 5},
 }
 
+# ⭐️ [수정 완료] 'icon' 키를 다시 추가하여 KeyError 해결!
 TIER_STYLE = {
-    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "label": "Rare"},
-    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "label": "Epic"},
-    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "label": "Unique"},
-    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "label": "Legendary"},
+    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "label": "Rare", "icon": "🔹"},
+    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "label": "Epic", "icon": "🔮"},
+    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "label": "Unique", "icon": "🌟"},
+    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "label": "Legendary", "icon": "🌿"},
 }
 
 RARE_BIRDS = {
@@ -246,7 +250,7 @@ current_badges = calculate_badges(df)
 if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
-    # ⭐️ 획득 시에도 오버레이 폭죽 터뜨리기 (loop=False로 1회만)
+    # ⭐️ 배지 획득 시에도 오버레이 폭죽 1회 재생 (loop=False)
     if lottie_fireworks:
         st_lottie(lottie_fireworks, key="badge_fireworks", loop=False)
     for nb in new_badges:
@@ -268,6 +272,7 @@ with st.sidebar:
         for badge_name in top_badges:
             info = BADGE_INFO.get(badge_name, {"tier": "rare"})
             style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
+            # ⭐️ style["icon"] 오류 해결!
             tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
             badge_html_parts.append(tag)
         badge_html_parts.append('</div>')
@@ -279,7 +284,7 @@ with st.sidebar:
                 for badge_name in other_badges:
                     info = BADGE_INFO.get(badge_name, {"tier": "rare"})
                     style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-                    extra_html += f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{badge_name}</span>'
+                    extra_html += f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
                 extra_html += '</div>'
                 st.markdown(extra_html, unsafe_allow_html=True)
     else:
@@ -342,18 +347,19 @@ with tab1:
                 if res is True: 
                     msg = f"{name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
+                    # 메시지 저장
                     st.session_state.add_message = ('success', msg)
                 else: 
                     st.session_state.add_message = ('error', res)
             
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
-        # ⭐️ 알림 메시지를 입력창 아래에 배치
+        # ⭐️ 입력창 바로 아래에 알림 박스 배치
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
             if msg_type == 'success':
-                # ⭐️ 성공 시 오버레이 폭죽 1회 재생 (loop=False)
                 if lottie_fireworks:
+                    # ⭐️ 성공 시 오버레이 폭죽 1회 재생 (loop=False)
                     st_lottie(lottie_fireworks, key="manual_fireworks", loop=False)
                 st.success(msg_text, icon="✅")
             else:
@@ -469,46 +475,58 @@ with tab2:
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
-    
     sorted_badges = sorted(BADGE_INFO.keys(), key=lambda x: BADGE_INFO[x]['rank'])
-    
     for badge_name in sorted_badges:
         info = BADGE_INFO[badge_name]
         is_earned = badge_name in current_badges
         style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
         
-        # 1. 이름 분리 (아이콘/텍스트)
+        # 이름 분리
         parts = badge_name.split(" ", 1)
         icon_emoji = parts[0] if len(parts) > 0 else "🏅"
         clean_name = parts[1] if len(parts) > 1 else badge_name
         
-        # 2. 스타일 결정
+        # 스타일 결정
         border_color = style.get('border', '#e0e0e0')
         bg_color = style['bg'] if is_earned else "#ffffff"
         opacity = "1.0" if is_earned else "0.6"
         grayscale = "0%" if is_earned else "100%"
         text_color = "#333333" if is_earned else "#999999"
         
-        # 3. HTML 카드 렌더링
-        st.markdown(f"""
-        <div style="
-            border: 2px solid {border_color};
-            background-color: {bg_color};
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            opacity: {opacity};
-            filter: grayscale({grayscale});
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        ">
-            <div style="font-size: 3rem; margin-right: 15px;">{icon_emoji}</div>
-            <div>
-                <div style="font-weight: bold; font-size: 1.1rem; color: {text_color};">
-                    {clean_name} <span style="font-size: 0.8rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 5px; padding: 2px 5px; margin-left: 5px;">{style['label']}</span>
+        with st.container(border=True):
+            c1, c2 = st.columns([0.25, 0.75])
+            with c1:
+                st.markdown(f"""
+                <div style="
+                    display: flex; justify-content: center; align-items: center;
+                    width: 70px; height: 70px;
+                    border-radius: 50%;
+                    border: 3px solid {style['color']};
+                    background-color: {style['bg']};
+                    font-size: 35px;
+                    opacity: {opacity};
+                    filter: grayscale({grayscale});
+                    margin: auto;
+                ">
+                    {icon_emoji}
                 </div>
-                <div style="font-size: 0.9rem; color: #666;">{info['desc']}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"""
+                <div style="
+                    border: 2px solid {border_color};
+                    background-color: {bg_color};
+                    border-radius: 10px;
+                    padding: 10px;
+                    opacity: {opacity};
+                    filter: grayscale({grayscale});
+                ">
+                    <div style="font-weight: bold; font-size: 1.1rem; color: {text_color}; margin-bottom: 4px;">
+                        {clean_name} 
+                        <span style="font-size: 0.75rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 6px; padding: 2px 6px; margin-left: 6px; vertical-align: middle;">
+                            {style['label']}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #666; line-height: 1.4;">{info['desc']}</div>
+                </div>
+                """, unsafe_allow_html=True)
