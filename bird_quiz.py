@@ -5,18 +5,19 @@ import google.generativeai as genai
 from PIL import Image
 from datetime import datetime
 import os
-import time  # ⭐️ 알림 시간차 삭제를 위해 추가
+import time
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
 
-# CSS: 깔끔한 UI 스타일
+# CSS: 깔끔한 UI 스타일 + 사이드바 가독성 개선
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 .stApp {padding-top: 10px;}
 
+/* 메인 요약 박스 */
 .summary-box {
     padding: 20px; border-radius: 15px; 
     background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
@@ -25,6 +26,7 @@ footer {visibility: hidden;}
 .summary-text { font-size: 1.1rem; color: #2e7d32; font-weight: bold; }
 .summary-count { font-size: 2rem; font-weight: 800; color: #1b5e20; }
 
+/* 사이드바 배지 컨테이너 */
 .sidebar-badge-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .sidebar-badge {
     display: inline-flex; align-items: center; padding: 4px 10px;
@@ -32,17 +34,37 @@ footer {visibility: hidden;}
     box-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; margin-bottom: 4px;
 }
 
+/* 탭 스타일 */
 .stTabs [data-baseweb="tab-list"] { gap: 10px; }
 .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; border-radius: 5px; }
 
+/* 도감 리스트 태그 스타일 */
 .rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
 .tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
 .tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
 .tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
 
+/* 버튼 스타일 */
 div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5F6, #90CAF9); color: white !important; border: none; border-radius: 12px; padding: 0.6rem 1rem; font-weight: 700; width: 100%; box-shadow: 0 3px 5px rgba(0,0,0,0.1); }
 [data-testid="stFileUploaderDropzone"] button { display: none !important; }
 [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
+
+/* ⭐️ [추가] 사이드바 Expander 스타일 개선 (가독성 UP) */
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background-color: white !important;
+    border-radius: 8px !important;
+    border: 1px solid #e0e0e0 !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+    margin-bottom: 8px !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    font-weight: 600 !important;
+    color: #333 !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stMarkdownContainer"] p {
+    font-size: 0.9rem !important;
+    color: #555 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -104,7 +126,7 @@ RARE_LABEL = { "class1": "👑 멸종위기 1급", "class2": "⭐ 멸종위기 2
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
-    if not os.path.exists(file_path): return {}, {}, 0, {}
+    if not os.path.exists(file_path): return {}, {}, 0, {}, {}
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
