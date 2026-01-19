@@ -207,23 +207,14 @@ def analyze_bird_image(image, user_doubt=None):
 # --- [4. 메인 화면] ---
 st.title("📚 탐조 도감")
 
-# 1. 데이터 가져오기 (가장 최신 상태)
 df = get_data()
-
-# 2. 현재 상태 기준 배지 계산
 current_badges = calculate_badges(df)
 
-# 3. [핵심] 신규 획득 배지 감지 로직
-# 세션에 '이전 배지 목록(my_badges)'이 없다면, 현재 상태를 그대로 저장 (첫 실행)
+# 배지 획득 감지 로직
 if 'my_badges' not in st.session_state:
     st.session_state['my_badges'] = current_badges
 
-# 차집합 연산: (현재 보유 배지) - (이전에 보유했던 배지) = 방금 새로 딴 배지
 newly_earned_badges = list(set(current_badges) - set(st.session_state['my_badges']))
-
-# 4. 배지 상태 동기화
-# 배지를 잃었든(삭제로 인해), 얻었든 항상 최신 상태(`current_badges`)로 세션을 업데이트합니다.
-# 이렇게 해야 나중에 다시 조건을 충족했을 때, `set(current) - set(old)`에서 차이가 발생하여 획득 알림이 뜹니다.
 st.session_state['my_badges'] = current_badges
 
 # 사이드바
@@ -313,26 +304,20 @@ with tab1:
                 if res is True: 
                     msg = f"{name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
-                    # 메시지 저장 (리런 후 표시됨)
                     st.session_state.add_message = ('success', msg)
                 else: 
                     st.session_state.add_message = ('error', res)
             
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
-        # ⭐️ 1. 등록 완료 알림 메시지 (입력창 바로 아래)
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
             if msg_type == 'success':
                 st.success(msg_text, icon="✅")
-                
-                # ⭐️ 2. 배지 획득 알림 (등록 완료 메시지 바로 아래)
-                # newly_earned_badges는 위에서 계산된 '방금 딴 배지들' 목록입니다.
                 if newly_earned_badges:
                     for b in newly_earned_badges:
                         st.info(f"🏆 **배지 획득!** [{b}]", icon="🎉")
-                
-                st.session_state.add_message = None # 표시 후 삭제 (1회성)
+                st.session_state.add_message = None
             else:
                 st.error(msg_text, icon="🚫")
                 st.session_state.add_message = None
@@ -381,7 +366,7 @@ with tab1:
                                 if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                                     res = save_data(bird_name, ai_sex, df)
                                     if res is True: 
-                                        st.session_state.add_message = ('success', f"✅ {bird_name}({ai_sex}) 등록 성공!")
+                                        st.session_state.add_message = ('success', f"{bird_name}({ai_sex}) 등록 성공!")
                                         st.rerun()
                                     else: st.error(res)
                         else:
@@ -396,12 +381,11 @@ with tab1:
                                     st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
                                     st.rerun()
         
-        # ⭐️ AI 분석 모드에서도 알림 메시지 (버튼 아래)
+        # AI 분석 모드 알림 메시지
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
             if msg_type == 'success':
                 st.success(msg_text, icon="✅")
-                # 배지 획득 알림
                 if newly_earned_badges:
                     for b in newly_earned_badges:
                         st.info(f"🏆 **배지 획득!** [{b}]", icon="🎉")
@@ -447,7 +431,7 @@ with tab2:
     else:
         st.info("아직 기록된 새가 없습니다. 첫 새를 등록해보세요!")
 
-# --- [Tab 3] 배지 도감 ---
+# --- [Tab 3] 배지 도감 (🎨 복구된 깔끔한 카드 디자인) ---
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
@@ -467,40 +451,26 @@ with tab3:
         grayscale = "0%" if is_earned else "100%"
         text_color = "#333333" if is_earned else "#999999"
         
-        with st.container(border=True):
-            c1, c2 = st.columns([0.25, 0.75])
-            with c1:
-                st.markdown(f"""
-                <div style="
-                    display: flex; justify-content: center; align-items: center;
-                    width: 70px; height: 70px;
-                    border-radius: 50%;
-                    border: 3px solid {style['color']};
-                    background-color: {style['bg']};
-                    font-size: 35px;
-                    opacity: {opacity};
-                    filter: grayscale({grayscale});
-                    margin: auto;
-                ">
-                    {icon_emoji}
+        # 🎨 원래대로 복구된 깔끔한 HTML 카드 렌더링
+        st.markdown(f"""
+        <div style="
+            border: 2px solid {border_color};
+            background-color: {bg_color};
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            opacity: {opacity};
+            filter: grayscale({grayscale});
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        ">
+            <div style="font-size: 3rem; margin-right: 15px;">{icon_emoji}</div>
+            <div>
+                <div style="font-weight: bold; font-size: 1.1rem; color: {text_color};">
+                    {clean_name} <span style="font-size: 0.8rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 5px; padding: 2px 5px; margin-left: 5px;">{style['label']}</span>
                 </div>
-                """, unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"""
-                <div style="
-                    border: 2px solid {border_color};
-                    background-color: {bg_color};
-                    border-radius: 10px;
-                    padding: 10px;
-                    opacity: {opacity};
-                    filter: grayscale({grayscale});
-                ">
-                    <div style="font-weight: bold; font-size: 1.1rem; color: {text_color}; margin-bottom: 4px;">
-                        {clean_name} 
-                        <span style="font-size: 0.75rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 6px; padding: 2px 6px; margin-left: 6px; vertical-align: middle;">
-                            {style['label']}
-                        </span>
-                    </div>
-                    <div style="font-size: 0.85rem; color: #666; line-height: 1.4;">{info['desc']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                <div style="font-size: 0.9rem; color: #666;">{info['desc']}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
