@@ -5,6 +5,7 @@ import google.generativeai as genai
 from PIL import Image
 from datetime import datetime
 import os
+import time  # ⭐️ 알림 시간차 삭제를 위해 추가
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
@@ -39,8 +40,6 @@ footer {visibility: hidden;}
 .tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
 .tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
 
-.stat-highlight { color: #2e7d32; font-weight: 700; }
-.sidebar-card { background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 15px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5F6, #90CAF9); color: white !important; border: none; border-radius: 12px; padding: 0.6rem 1rem; font-weight: 700; width: 100%; box-shadow: 0 3px 5px rgba(0,0,0,0.1); }
 [data-testid="stFileUploaderDropzone"] button { display: none !important; }
 [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
@@ -122,12 +121,19 @@ def load_bird_map():
             bird_list = bird_data['name'].tolist()
             name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
+            # 과별 새 목록 (전체 도감)
+            family_groups = {}
+            for index, row in bird_data.iterrows():
+                fam = row['family']
+                nm = row['name']
+                if fam not in family_groups: family_groups[fam] = []
+                family_groups[fam].append(nm)
             family_total_counts = bird_data['family'].value_counts().to_dict()
-            return name_to_no, name_to_family, total_species_count, family_total_counts
+            return name_to_no, name_to_family, total_species_count, family_total_counts, family_groups
         except Exception as e: continue
-    return {}, {}, 0, {}
+    return {}, {}, 0, {}, {}
 
-BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS = load_bird_map()
+BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS, FAMILY_GROUPS = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
@@ -210,7 +216,7 @@ st.title("📚 탐조 도감")
 df = get_data()
 current_badges = calculate_badges(df)
 
-# 배지 획득 감지 로직
+# 배지 획득 감지
 if 'my_badges' not in st.session_state:
     st.session_state['my_badges'] = current_badges
 
@@ -248,24 +254,49 @@ with st.sidebar:
         st.caption("획득한 배지가 없습니다.")
     
     st.divider()
+    
+    # ⭐️ 2. [기능 추가] 과별 수집 현황 (펼쳐서 미등록종 확인)
     st.header("📊 과별 수집 현황")
     if FAMILY_TOTAL_COUNTS:
+        # 내 도감의 과별 수집 수 계산
         my_family_counts = {}
+        my_collected_birds = {} # 과별 수집된 새 이름 리스트
+        
         if not df.empty and FAMILY_MAP:
             df['family'] = df['bird_name'].map(FAMILY_MAP)
             my_family_counts = df['family'].value_counts().to_dict()
+            # 과별 수집된 새 목록 만들기
+            for idx, row in df.iterrows():
+                f = row['family']
+                n = row['bird_name']
+                if f not in my_collected_birds: my_collected_birds[f] = []
+                my_collected_birds[f].append(n)
+
         sorted_families = sorted(FAMILY_TOTAL_COUNTS.keys())
+        
         for family in sorted_families:
             total = FAMILY_TOTAL_COUNTS[family]
             count = my_family_counts.get(family, 0)
-            highlight_class = "stat-highlight" if count > 0 else ""
-            st.markdown(f"""
-            <div class="sidebar-card">
-                <div class="card-title">{family}</div>
-                <div class="card-stat">
-                    <span class="{highlight_class}">{count}</span> / {total}
-                </div>
-            </div>""", unsafe_allow_html=True)
+            
+            # 펼치기(Expander)로 상세 정보 표시
+            # 헤더에 (수집수 / 전체수) 표시
+            with st.expander(f"{family} ({count}/{total})"):
+                # 1. 획득한 새
+                collected_list = my_collected_birds.get(family, [])
+                if collected_list:
+                    st.markdown(f"**✅ 획득 ({len(collected_list)})**")
+                    st.caption(", ".join(collected_list))
+                
+                # 2. 미획득 새 (전체 목록 - 획득 목록)
+                all_birds_in_family = FAMILY_GROUPS.get(family, [])
+                missing_list = [b for b in all_birds_in_family if b not in collected_list]
+                
+                if missing_list:
+                    st.markdown(f"**🔒 미획득 ({len(missing_list)})**")
+                    # 너무 많으면 일부만 보여주거나 스크롤 처리 (여기선 텍스트로 나열)
+                    st.caption(", ".join(missing_list))
+                elif total > 0:
+                    st.success("🎉 모든 종 수집 완료!")
 
 # 메인 요약
 total_collected = len(df)
@@ -310,16 +341,30 @@ with tab1:
             
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
+        # ⭐️ 1. 알림 메시지 (입력창 아래) + 자동 사라짐
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
+            placeholder = st.empty() # 빈 공간 확보
+            
             if msg_type == 'success':
-                st.success(msg_text, icon="✅")
+                placeholder.success(msg_text, icon="✅")
+                
+                # 배지 획득 알림 (등록 알림 아래에)
+                badge_placeholder = st.empty()
                 if newly_earned_badges:
                     for b in newly_earned_badges:
-                        st.info(f"🏆 **배지 획득!** [{b}]", icon="🎉")
+                        badge_placeholder.info(f"🏆 **배지 획득!** [{b}]", icon="🎉")
+                
+                # 3초 대기 후 삭제
+                time.sleep(3)
+                placeholder.empty()
+                badge_placeholder.empty()
                 st.session_state.add_message = None
+                
             else:
-                st.error(msg_text, icon="🚫")
+                placeholder.error(msg_text, icon="🚫")
+                time.sleep(3)
+                placeholder.empty()
                 st.session_state.add_message = None
         
     else: # AI 분석
@@ -366,7 +411,7 @@ with tab1:
                                 if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                                     res = save_data(bird_name, ai_sex, df)
                                     if res is True: 
-                                        st.session_state.add_message = ('success', f"{bird_name}({ai_sex}) 등록 성공!")
+                                        st.session_state.add_message = ('success', f"✅ {bird_name}({ai_sex}) 등록 성공!")
                                         st.rerun()
                                     else: st.error(res)
                         else:
@@ -384,14 +429,23 @@ with tab1:
         # AI 분석 모드 알림 메시지
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
+            placeholder = st.empty()
+            
             if msg_type == 'success':
-                st.success(msg_text, icon="✅")
+                placeholder.success(msg_text, icon="✅")
+                badge_placeholder = st.empty()
                 if newly_earned_badges:
                     for b in newly_earned_badges:
-                        st.info(f"🏆 **배지 획득!** [{b}]", icon="🎉")
+                        badge_placeholder.info(f"🏆 **배지 획득!** [{b}]", icon="🎉")
+                
+                time.sleep(3)
+                placeholder.empty()
+                badge_placeholder.empty()
                 st.session_state.add_message = None
             else:
-                st.error(msg_text, icon="🚫")
+                placeholder.error(msg_text, icon="🚫")
+                time.sleep(3)
+                placeholder.empty()
                 st.session_state.add_message = None
 
 # --- [Tab 2] 나의 도감 ---
@@ -431,7 +485,7 @@ with tab2:
     else:
         st.info("아직 기록된 새가 없습니다. 첫 새를 등록해보세요!")
 
-# --- [Tab 3] 배지 도감 (🎨 복구된 깔끔한 카드 디자인) ---
+# --- [Tab 3] 배지 도감 (🎨 깔끔한 카드 디자인) ---
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
@@ -451,7 +505,6 @@ with tab3:
         grayscale = "0%" if is_earned else "100%"
         text_color = "#333333" if is_earned else "#999999"
         
-        # 🎨 원래대로 복구된 깔끔한 HTML 카드 렌더링
         st.markdown(f"""
         <div style="
             border: 2px solid {border_color};
