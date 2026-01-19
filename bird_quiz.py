@@ -452,7 +452,7 @@ with tab1:
                 placeholder.empty()
                 st.session_state.add_message = None
 
-# --- [Tab 2] 나의 도감 (✨ 페이징 & 편집 모드 & UI 버그 수정) ---
+# --- [Tab 2] 나의 도감 (✨ 페이징 & 편집 모드) ---
 with tab2:
     st.subheader("📜 나의 탐조 목록")
     
@@ -516,15 +516,18 @@ with tab2:
                 
                 record_date = row.get('date', '')
                 
-                # ⭐️ [UI Fix] HTML 태그 들여쓰기 제거
-                st.markdown(f"""<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
-    <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
-        <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
-        {rare_tag}
-    </div>
-    <div style="font-size:0.8rem; color:#999;">{record_date}</div>
-</div>""", unsafe_allow_html=True)
+                # ⭐️ [UI Fix] 한 줄로 이어붙여서 마크다운 해석 오류 방지
+                row_html = (
+                    f'<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">'
+                    f'<div style="display:flex; align-items:center; gap:12px;">'
+                    f'<span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>'
+                    f'<span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>'
+                    f'{rare_tag}'
+                    f'</div>'
+                    f'<div style="font-size:0.8rem; color:#999;">{record_date}</div>'
+                    f'</div>'
+                )
+                st.markdown(row_html, unsafe_allow_html=True)
             
             st.caption(f"총 {total_items}마리 중 {start_idx+1}~{min(end_idx, total_items)}번째 표시")
 
