@@ -10,7 +10,7 @@ import time
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
 
-# CSS: 깔끔한 UI 스타일 + 사이드바 가독성 개선 + 레벨바 스타일
+# CSS: 깔끔한 UI 스타일
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -97,12 +97,10 @@ ACHIEVEMENT_INFO = {
     "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리/매) 10마리 이상 수집. 하늘의 포식자들을 정복했습니다.", "rank": 4},
     "🦢 우아한 백로": {"tier": "epic", "desc": "백로/왜가리과 5마리 이상 수집", "rank": 3},
     "🌲 숲속의 드러머": {"tier": "epic", "desc": "딱따구리과 3마리 이상 수집", "rank": 3},
-    # 🔥 [상향] 1마리 -> 3마리
     "🦉 밤의 추적자": {"tier": "unique", "desc": "올빼미과(부엉이 등) 3마리 이상 수집. 어둠 속의 진정한 지배자입니다.", "rank": 4},
     "🧠 똑똑한 새": {"tier": "rare", "desc": "까마귀과 3마리 이상 수집", "rank": 2},
     "👔 넥타이 신사": {"tier": "rare", "desc": "박새과 3마리 이상 수집", "rank": 2},
     "🏖️ 갯벌의 나그네": {"tier": "epic", "desc": "도요/물떼새과 15마리 이상 수집. 식별 난이도 최상급을 정복했군요.", "rank": 3},
-    # 🔥 [상향] 1마리 -> 3마리
     "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종 3마리 이상 발견! 운도 실력입니다.", "rank": 4},
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 10마리 이상 기록. 당신은 진정한 생태 지킴이입니다.", "rank": 5},
 }
@@ -202,8 +200,6 @@ def delete_birds(bird_names_to_delete, current_df):
 def calculate_achievements(df):
     achievements = []
     count = len(df)
-    
-    # 1. 수집 개수
     if count >= 1: achievements.append("🐣 탐조 입문")
     if count >= 10: achievements.append("🌱 새싹 탐조가")
     if count >= 50: achievements.append("🥉 아마추어 탐조가")
@@ -211,7 +207,6 @@ def calculate_achievements(df):
     if count >= 300: achievements.append("🥇 마스터 탐조가")
     if count >= 500: achievements.append("💎 전설의 탐조가")
     
-    # 2. 과별 & 희귀종 (난이도 상향 적용)
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
@@ -221,10 +216,7 @@ def calculate_achievements(df):
         if fam_counts.get('수리과', 0) + fam_counts.get('매과', 0) >= 10: achievements.append("🦅 하늘의 제왕")
         if fam_counts.get('백로과', 0) >= 5: achievements.append("🦢 우아한 백로")
         if fam_counts.get('딱다구리과', 0) >= 3: achievements.append("🌲 숲속의 드러머")
-        
-        # 🔥 [상향] 야행성 추적자: 올빼미과 3마리 이상
         if fam_counts.get('올빼미과', 0) >= 3: achievements.append("🦉 밤의 추적자")
-            
         if fam_counts.get('까마귀과', 0) >= 3: achievements.append("🧠 똑똑한 새")
         if fam_counts.get('박새과', 0) >= 3: achievements.append("👔 넥타이 신사")
         if fam_counts.get('도요과', 0) >= 15: achievements.append("🏖️ 갯벌의 나그네")
@@ -232,34 +224,43 @@ def calculate_achievements(df):
     rare_count = 0
     for name in df['bird_name']:
         if name in RARE_BIRDS: rare_count += 1
-    # 🔥 [상향] 럭키 탐조가: 3마리 이상
     if rare_count >= 3: achievements.append("🍀 럭키 탐조가")
     if rare_count >= 10: achievements.append("🛡️ 자연의 수호자")
     
     return achievements
 
-# 경험치 및 레벨 계산 함수
+# ⭐️ [신규] 과별 이모지 반환 함수
+def get_family_emoji(bird_name):
+    if bird_name not in FAMILY_MAP:
+        return "🐦"
+    
+    family = FAMILY_MAP[bird_name]
+    
+    if "오리" in family or "기러기" in family or "고니" in family: return "🦆"
+    if "수리" in family or "매과" in family: return "🦅"
+    if "올빼미" in family: return "🦉"
+    if "백로" in family or "왜가리" in family or "두루미" in family or "황새" in family: return "🦢"
+    if "닭" in family or "꿩" in family: return "🐓"
+    if "비둘기" in family: return "🕊️"
+    if "딱다구리" in family: return "🪵" # 딱따구리는 나무
+    if "도요" in family or "물떼새" in family: return "🏖️"
+    
+    return "🐦" # 기본값
+
 def calculate_xp_and_level(df, achievements):
     total_xp = 0
-    
-    # 1. 새 등록 경험치
     if not df.empty:
         for name in df['bird_name']:
             if name in RARE_BIRDS:
                 rarity = RARE_BIRDS[name]
                 if rarity == "class1": total_xp += 50
-                else: total_xp += 30 # class2 or natural
+                else: total_xp += 30 
             else:
-                total_xp += 10 # 일반 새
-    
-    # 2. 업적 달성 경험치
+                total_xp += 10
     total_xp += len(achievements) * 50
-    
-    # 3. 레벨 계산 (레벨당 100XP 필요)
     level = (total_xp // 100) + 1
     current_xp_in_level = total_xp % 100
     next_level_xp = 100
-    
     return level, current_xp_in_level, next_level_xp, total_xp
 
 def analyze_bird_image(image, user_doubt=None):
@@ -279,19 +280,16 @@ st.title("📚 탐조 도감")
 df = get_data()
 current_achievements = calculate_achievements(df)
 
-# 배지(업적) 획득 감지
 if 'my_achievements' not in st.session_state:
     st.session_state['my_achievements'] = current_achievements
 
 newly_earned = list(set(current_achievements) - set(st.session_state['my_achievements']))
 st.session_state['my_achievements'] = current_achievements
 
-# 레벨 계산
 level, curr_xp, req_xp, total_xp = calculate_xp_and_level(df, current_achievements)
 
 # 사이드바
 with st.sidebar:
-    # 레벨 표시 UI
     st.markdown(f"""
     <div class="level-container">
         <p class="level-text">Lv. {level}</p>
@@ -576,11 +574,14 @@ with tab2:
                 
                 record_date = row.get('date', '')
                 
-                # HTML 들여쓰기 제거 및 한줄 처리 (오류 방지)
+                # ⭐️ [UI Fix] 이모지 추가 반영
+                family_emoji = get_family_emoji(bird)
+                
                 row_html = (
                     f'<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">'
                     f'<div style="display:flex; align-items:center; gap:12px;">'
                     f'<span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>'
+                    f'<span style="font-size:1.5rem;">{family_emoji}</span>' # 이모지 추가
                     f'<span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>'
                     f'{rare_tag}'
                     f'</div>'
