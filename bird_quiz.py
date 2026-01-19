@@ -31,7 +31,6 @@ BADGE_INFO = {
     "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 기록. 당신은 자연의 지킴이입니다.", "rank": 5},
 }
 
-# 배경색(bg)을 아주 연한 파스텔톤으로 설정하여 획득 시 채워지는 느낌 강조
 TIER_STYLE = {
     "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "label": "Rare"},
     "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "label": "Epic"},
@@ -301,22 +300,38 @@ tab1, tab2, tab3 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 배
 
 # --- [Tab 1] 종 추가 ---
 with tab1:
-    st.subheader("새로운 새 기록하기")
+    st.subheader("✍️ 새로운 새 기록하기")
     input_method = st.radio("입력 방식 선택", ["📝 직접 이름 입력", "📸 AI 사진 분석"], horizontal=True)
     
+    # ⭐️ 모바일용 알림 메시지 영역 (입력창 바로 위에 고정됨)
+    if 'add_message' in st.session_state and st.session_state.add_message:
+        msg_type, msg_text = st.session_state.add_message
+        if msg_type == 'success':
+            st.success(msg_text, icon="✅")
+            st.snow()
+        else:
+            st.error(msg_text, icon="🚫")
+        # 한 번 보여줬으면 다음엔 안 보이게 하려면 아래 줄 주석 해제 (지금은 계속 보이게 둠)
+        # st.session_state.add_message = None 
+
     if input_method == "📝 직접 이름 입력":
         sex_selection = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key="manual_sex")
+        
         def add_manual():
             name = st.session_state.input_bird.strip()
             sex = st.session_state.manual_sex 
-            st.session_state.input_bird = ""
+            st.session_state.input_bird = "" # 입력창 비우기
+            
             if name:
                 res = save_data(name, sex, df)
                 if res is True: 
-                    msg = f"✅ {name}({sex}) 등록 완료!"
+                    msg = f"{name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
-                    st.toast(msg) # ⭐️ st.rerun() 제거함 (자동 새로고침됨)
-                else: st.toast(f"🚫 {res}")
+                    # ⭐️ 핵심: 토스트 대신 세션 스테이트에 메시지 저장 -> 리런 후 위쪽 박스에 표시됨
+                    st.session_state.add_message = ('success', msg)
+                else: 
+                    st.session_state.add_message = ('error', res)
+            
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
     else: # AI 분석
@@ -362,7 +377,9 @@ with tab1:
                             with col_btn:
                                 if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                                     res = save_data(bird_name, ai_sex, df)
-                                    if res is True: st.toast(f"🎉 {bird_name}({ai_sex}) 등록 성공!"); st.rerun()
+                                    if res is True: 
+                                        st.session_state.add_message = ('success', f"{bird_name}({ai_sex}) 등록 성공!")
+                                        st.rerun()
                                     else: st.error(res)
                         else:
                             st.warning(f"⚠️ **{bird_name}**")
