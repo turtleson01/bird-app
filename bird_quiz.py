@@ -11,24 +11,23 @@ from streamlit_lottie import st_lottie
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
 
-# ⭐️ [CSS 수정] Lottie가 화면 공간을 차지하지 않게 'height: 0' 강제 적용
+# ⭐️ [CSS] Lottie 오버레이 설정 (화면 공간 차지 X, 클릭 통과)
 st.markdown("""
 <style>
-/* Lottie 컨테이너 자체를 화면 밖으로 빼거나 크기를 0으로 만듦 */
 div[data-testid="stLottie"] {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 9999; /* 제일 위에 */
-    pointer-events: none; /* 클릭 통과 */
-    margin: 0;
-    padding: 0;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 99999 !important;
+    pointer-events: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 iframe[title="streamlit_lottie.st_lottie"] {
-    width: 100vw;
-    height: 100vh;
+    width: 100vw !important;
+    height: 100vh !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -70,10 +69,10 @@ BADGE_INFO = {
 }
 
 TIER_STYLE = {
-    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "icon": "🔹", "label": "Rare"},
-    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "icon": "🔮", "label": "Epic"},
-    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "icon": "🌟", "label": "Unique"},
-    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "icon": "🌿", "label": "Legendary"},
+    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "label": "Rare", "icon": "🔹"},
+    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "label": "Epic", "icon": "🔮"},
+    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "label": "Unique", "icon": "🌟"},
+    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "label": "Legendary", "icon": "🌿"},
 }
 
 RARE_BIRDS = {
@@ -255,12 +254,15 @@ current_badges = calculate_badges(df)
 if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
-    # ⭐️ [변경] 폭죽은 오직 배지 획득 시에만!
+    # ⭐️ [배지 획득 시에만 폭죽] (1회 재생 + 클릭 통과 + 전체 화면)
     if lottie_fireworks:
-        st_lottie(lottie_fireworks, key="badge_fireworks", loop=False)
+        st_lottie(lottie_fireworks, key="badge_fireworks", loop=False, height=0, width=0) # height 0이지만 CSS로 강제 확장됨
     for nb in new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
-    st.session_state['my_badges'] = current_badges
+
+# ⭐️ [핵심 수정] 배지 획득/상실 여부와 상관없이 항상 현재 배지 상태를 동기화
+# 이렇게 해야 새를 삭제했을 때 배지도 함께 사라진 상태로 업데이트됨
+st.session_state['my_badges'] = current_badges
 
 # 사이드바
 with st.sidebar:
@@ -357,13 +359,11 @@ with tab1:
             
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
-        # ⭐️ 알림 메시지 (입력창 아래)
-        # 폭죽 애니메이션 삭제 -> 메시지만 깔끔하게 나옴
+        # ⭐️ 알림 메시지 (입력창 바로 아래)
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
             if msg_type == 'success':
                 st.success(msg_text, icon="✅")
-                # 메시지 표시 후 바로 비워서 다음엔 안 나오게 함 (1회성)
                 st.session_state.add_message = None
             else:
                 st.error(msg_text, icon="🚫")
@@ -428,6 +428,7 @@ with tab1:
                                     st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
                                     st.rerun()
         
+        # ⭐️ AI 분석 알림 메시지 (버튼 아래)
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
             if msg_type == 'success':
