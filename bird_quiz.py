@@ -210,7 +210,14 @@ st.title("📚 탐조 도감")
 df = get_data()
 current_badges = calculate_badges(df)
 
-# 배지 상태 동기화 (항상 현재 데이터 기준)
+# ⭐️ [핵심 로직] 배지 획득 감지 (이전 상태와 비교)
+if 'my_badges' not in st.session_state:
+    st.session_state['my_badges'] = current_badges # 초기화
+
+# 새로 얻은 배지 계산 (현재 - 이전)
+new_earned_badges = list(set(current_badges) - set(st.session_state['my_badges']))
+
+# 배지 상태 동기화 (항상 현재 상태로 업데이트)
 st.session_state['my_badges'] = current_badges
 
 # 사이드바
@@ -298,45 +305,27 @@ with tab1:
             if name:
                 res = save_data(name, sex, df)
                 if res is True: 
-                    # 1. 메시지 기본 생성
-                    msg = f"✅ {name}({sex}) 등록 완료!"
+                    msg = f"{name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
-                    
-                    # 2. 배지 획득 여부 체크 (즉석 계산)
-                    # 현재(저장 후) 데이터를 기준으로 배지 다시 계산
-                    try:
-                        # 방금 저장한 데이터를 반영하기 위해 df에 행 추가 시뮬레이션 또는 재로딩 필요하지만
-                        # 간단히 현재 보유 배지와 비교. 
-                        # *주의: save_data가 리런을 트리거하지 않으므로, 
-                        # 여기서는 '예상 배지'를 계산하거나, 리런 후 메시지를 띄우는 방식이 안전함.
-                        # 여기서는 리런을 하므로, 리런 직전에 메시지를 세션에 담음.
-                        pass 
-                    except: pass
-                    
                     st.session_state.add_message = ('success', msg)
                 else: 
                     st.session_state.add_message = ('error', res)
             
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
         
-        # ⭐️ 알림 메시지 (입력창 바로 아래)
+        # ⭐️ 알림 메시지 로직 (입력창 아래 배치)
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
-            
-            # 배지 획득 여부 확인 (리런 후 계산된 current_badges와 비교 로직은 복잡해지므로, 
-            # 여기서는 단순히 등록 메시지만 띄우고, 배지 탭에서 확인하게 하거나
-            # 혹은 아래처럼 텍스트를 추가할 수 있음)
-            
-            # ⭐️ 새로 획득한 배지가 있다면 메시지에 추가
-            # (이 시점은 리런 후이므로 current_badges가 최신임)
-            # 다만, 이전 상태를 모르므로 '방금 획득했는지' 알기 어려움.
-            # 심플하게 등록 성공 메시지만 띄움.
-            
             if msg_type == 'success':
-                st.success(msg_text)
-                st.session_state.add_message = None
+                st.success(msg_text, icon="✅")
+                # ⭐️ 배지 획득 알림도 여기에 추가 (1회성)
+                if new_earned_badges:
+                    for b in new_earned_badges:
+                        st.success(f"🏆 **배지 획득!** [{b}]", icon="🎉")
+                
+                st.session_state.add_message = None # 표시 후 삭제
             else:
-                st.error(msg_text)
+                st.error(msg_text, icon="🚫")
                 st.session_state.add_message = None
         
     else: # AI 분석
@@ -383,7 +372,7 @@ with tab1:
                                 if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
                                     res = save_data(bird_name, ai_sex, df)
                                     if res is True: 
-                                        st.session_state.add_message = ('success', f"✅ {bird_name}({ai_sex}) 등록 성공!")
+                                        st.session_state.add_message = ('success', f"{bird_name}({ai_sex}) 등록 성공!")
                                         st.rerun()
                                     else: st.error(res)
                         else:
@@ -398,14 +387,18 @@ with tab1:
                                     st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
                                     st.rerun()
         
-        # ⭐️ AI 분석 알림 메시지 (버튼 아래)
+        # ⭐️ AI 분석 모드에서도 알림 메시지 (버튼 아래)
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
             if msg_type == 'success':
-                st.success(msg_text)
+                st.success(msg_text, icon="✅")
+                # 배지 획득 알림
+                if new_earned_badges:
+                    for b in new_earned_badges:
+                        st.success(f"🏆 **배지 획득!** [{b}]", icon="🎉")
                 st.session_state.add_message = None
             else:
-                st.error(msg_text)
+                st.error(msg_text, icon="🚫")
                 st.session_state.add_message = None
 
 # --- [Tab 2] 나의 도감 ---
