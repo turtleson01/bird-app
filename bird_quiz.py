@@ -71,7 +71,6 @@ except:
     st.stop()
 
 # --- [2. 데이터 및 설정] ---
-# 명칭은 '업적'으로 유지하되, 내용은 기존 '생태/수집' 중심 조건으로 복구
 ACHIEVEMENT_INFO = {
     "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 시작이 반입니다.", "rank": 1},
     "🌱 새싹 탐조가": {"tier": "rare", "desc": "5마리의 새를 만났습니다.", "rank": 1.5},
@@ -189,7 +188,6 @@ def calculate_achievements(df):
     achievements = []
     count = len(df)
     
-    # 1. 기본 수집 개수
     if count >= 1: achievements.append("🐣 탐조 입문")
     if count >= 5: achievements.append("🌱 새싹 탐조가")
     if count >= 20: achievements.append("🥉 아마추어 탐조가")
@@ -197,7 +195,6 @@ def calculate_achievements(df):
     if count >= 100: achievements.append("🥇 마스터 탐조가")
     if count >= 300: achievements.append("💎 전설의 탐조가")
     
-    # 2. 과별 & 희귀종 (시간 조건 모두 제거)
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
@@ -455,22 +452,18 @@ with tab1:
                 placeholder.empty()
                 st.session_state.add_message = None
 
-# --- [Tab 2] 나의 도감 (✨ 페이징 & 편집 모드 적용) ---
+# --- [Tab 2] 나의 도감 (✨ 페이징 & 편집 모드 & UI 버그 수정) ---
 with tab2:
     st.subheader("📜 나의 탐조 목록")
     
-    # 1. 🛠️ 편집 모드 토글
     edit_mode = st.toggle("🛠️ 목록 관리 (삭제 모드)", key="edit_mode")
     
     if not df.empty:
-        # A. 편집 모드일 때: 데이터 에디터 (체크박스 삭제)
         if edit_mode:
             st.caption("삭제할 항목을 선택(체크)하고 아래 버튼을 누르세요.")
-            # 삭제용 임시 데이터프레임 생성
             df_to_edit = df.copy()
-            df_to_edit['삭제'] = False # 체크박스 컬럼 추가
+            df_to_edit['삭제'] = False 
             
-            # 컬럼 순서 조정 (삭제 체크박스를 맨 앞으로)
             cols = ['삭제'] + [c for c in df_to_edit.columns if c != '삭제']
             df_to_edit = df_to_edit[cols]
             
@@ -484,7 +477,6 @@ with tab2:
                 use_container_width=True
             )
             
-            # 삭제 버튼 동작
             to_delete_list = edited_df[edited_df['삭제'] == True]['bird_name'].tolist()
             if to_delete_list:
                 if st.button(f"선택한 {len(to_delete_list)}개 항목 영구 삭제", type="primary"):
@@ -494,19 +486,15 @@ with tab2:
                         st.rerun()
                     else:
                         st.error(f"삭제 실패: {res}")
-        
-        # B. 일반 모드일 때: 기존 리스트 UI + 페이징(Pagination)
         else:
             items_per_page = 10
             total_items = len(df)
             total_pages = max(1, (total_items - 1) // items_per_page + 1)
             
-            # 페이지 컨트롤 (상단)
             col_page1, col_page2 = st.columns([8, 2])
             with col_page2:
                 page = st.number_input("페이지", min_value=1, max_value=total_pages, step=1, label_visibility="collapsed")
             
-            # 현재 페이지 데이터 슬라이싱
             start_idx = (page - 1) * items_per_page
             end_idx = start_idx + items_per_page
             page_df = df.iloc[start_idx:end_idx]
@@ -528,16 +516,15 @@ with tab2:
                 
                 record_date = row.get('date', '')
                 
-                st.markdown(f"""
-                <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
-                        <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
-                        {rare_tag}
-                    </div>
-                    <div style="font-size:0.8rem; color:#999;">{record_date}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                # ⭐️ [UI Fix] HTML 태그 들여쓰기 제거
+                st.markdown(f"""<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
+    <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
+        <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
+        {rare_tag}
+    </div>
+    <div style="font-size:0.8rem; color:#999;">{record_date}</div>
+</div>""", unsafe_allow_html=True)
             
             st.caption(f"총 {total_items}마리 중 {start_idx+1}~{min(end_idx, total_items)}번째 표시")
 
