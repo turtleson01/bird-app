@@ -5,9 +5,22 @@ import google.generativeai as genai
 from PIL import Image
 from datetime import datetime
 import os
+import requests # ⭐️ 추가됨: Lottie 애니메이션 로딩용
+from streamlit_lottie import st_lottie # ⭐️ 추가됨: Lottie 애니메이션 표시용
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
+
+# ⭐️ Lottie 애니메이션 로드 함수
+@st.cache_data
+def load_lottieurl(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+# ⭐️ 폭죽 애니메이션 URL (마음에 드는 다른 주소로 변경 가능)
+lottie_fireworks = load_lottieurl("https://assets6.lottiefiles.com/packages/lf20_rovf9gzu.json")
 
 # --- [2. 데이터 및 설정] ---
 BADGE_INFO = {
@@ -32,10 +45,10 @@ BADGE_INFO = {
 }
 
 TIER_STYLE = {
-    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "label": "Rare"},
-    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "label": "Epic"},
-    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "label": "Unique"},
-    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "label": "Legendary"},
+    "rare":      {"color": "#1E88E5", "bg": "#E3F2FD", "border": "#64B5F6", "icon": "🔹", "label": "Rare"},
+    "epic":      {"color": "#8E24AA", "bg": "#F3E5F5", "border": "#BA68C8", "icon": "🔮", "label": "Epic"},
+    "unique":    {"color": "#F57C00", "bg": "#FFF3E0", "border": "#FFB74D", "icon": "🌟", "label": "Unique"},
+    "legendary": {"color": "#2E7D32", "bg": "#E8F5E9", "border": "#81C784", "icon": "🌿", "label": "Legendary"},
 }
 
 RARE_BIRDS = {
@@ -167,7 +180,6 @@ def calculate_badges(df):
     badges = []
     count = len(df)
     
-    # 1. 수집 개수
     if count >= 1: badges.append("🐣 탐조 입문")
     if count >= 5: badges.append("🌱 새싹 탐조가")
     if count >= 20: badges.append("🥉 아마추어 탐조가")
@@ -175,7 +187,6 @@ def calculate_badges(df):
     if count >= 100: badges.append("🥇 마스터 탐조가")
     if count >= 300: badges.append("💎 전설의 탐조가")
     
-    # 2. 과별
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
@@ -192,7 +203,6 @@ def calculate_badges(df):
         if fam_counts.get('박새과', 0) >= 3: badges.append("👔 넥타이 신사")
         if fam_counts.get('도요과', 0) >= 5: badges.append("🏖️ 갯벌의 나그네")
     
-    # 3. 희귀종
     rare_count = 0
     for name in df['bird_name']:
         if name in RARE_BIRDS: rare_count += 1
@@ -220,7 +230,9 @@ current_badges = calculate_badges(df)
 if 'my_badges' not in st.session_state: st.session_state['my_badges'] = current_badges
 new_badges = [b for b in current_badges if b not in st.session_state['my_badges']]
 if new_badges:
-    st.snow() # ⭐️ 이펙트 변경: 눈송이/파티클 (폭죽 느낌)
+    # ⭐️ 배지 획득 시에도 폭죽 애니메이션 재생
+    if lottie_fireworks:
+        st_lottie(lottie_fireworks, height=300, key="badge_fireworks")
     for nb in new_badges:
         st.toast(f"🏆 새로운 배지 획득! : {nb}", icon="🎉")
     st.session_state['my_badges'] = current_badges
@@ -237,16 +249,14 @@ with st.sidebar:
         top_badges = sorted_badges[:3]
         other_badges = sorted_badges[3:]
         
-        # 3. 상위 배지 렌더링
         for badge_name in top_badges:
             info = BADGE_INFO.get(badge_name, {"tier": "rare"})
             style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-            tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{badge_name}</span>'
+            tag = f'<span class="sidebar-badge" style="background-color: {style["bg"]}; color: {style["color"]}; border: 1px solid {style["color"]}40;">{style["icon"]} {badge_name}</span>'
             badge_html_parts.append(tag)
         badge_html_parts.append('</div>')
         st.markdown("".join(badge_html_parts), unsafe_allow_html=True)
         
-        # 4. 나머지는 Expander로 숨김
         if other_badges:
             with st.expander("🔽 보유 배지 전체 보기"):
                 extra_html = '<div class="sidebar-badge-container">'
@@ -303,36 +313,35 @@ with tab1:
     st.subheader("✍️ 새로운 새 기록하기")
     input_method = st.radio("입력 방식 선택", ["📝 직접 이름 입력", "📸 AI 사진 분석"], horizontal=True)
     
-    # ⭐️ 모바일용 알림 메시지 영역 (입력창 바로 위에 고정됨)
-    if 'add_message' in st.session_state and st.session_state.add_message:
-        msg_type, msg_text = st.session_state.add_message
-        if msg_type == 'success':
-            st.success(msg_text, icon="✅")
-            st.snow()
-        else:
-            st.error(msg_text, icon="🚫")
-        # 한 번 보여줬으면 다음엔 안 보이게 하려면 아래 줄 주석 해제 (지금은 계속 보이게 둠)
-        # st.session_state.add_message = None 
-
     if input_method == "📝 직접 이름 입력":
         sex_selection = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key="manual_sex")
         
         def add_manual():
             name = st.session_state.input_bird.strip()
             sex = st.session_state.manual_sex 
-            st.session_state.input_bird = "" # 입력창 비우기
+            st.session_state.input_bird = ""
             
             if name:
                 res = save_data(name, sex, df)
                 if res is True: 
                     msg = f"{name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
-                    # ⭐️ 핵심: 토스트 대신 세션 스테이트에 메시지 저장 -> 리런 후 위쪽 박스에 표시됨
                     st.session_state.add_message = ('success', msg)
                 else: 
                     st.session_state.add_message = ('error', res)
             
         st.text_input("새 이름을 입력하세요", key="input_bird", on_change=add_manual, placeholder="예: 참새")
+        
+        # ⭐️ 알림 메시지 영역을 입력창 아래로 이동!
+        if 'add_message' in st.session_state and st.session_state.add_message:
+            msg_type, msg_text = st.session_state.add_message
+            if msg_type == 'success':
+                # ⭐️ 성공 시 폭죽 애니메이션 재생 (st.snow 대체)
+                if lottie_fireworks:
+                    st_lottie(lottie_fireworks, height=300, key="manual_fireworks")
+                st.success(msg_text, icon="✅")
+            else:
+                st.error(msg_text, icon="🚫")
         
     else: # AI 분석
         uploaded_files = st.file_uploader("새 사진 업로드", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
@@ -392,6 +401,15 @@ with tab1:
                                 with st.spinner("재분석 중..."):
                                     st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
                                     st.rerun()
+        # ⭐️ AI 분석 모드에서도 알림 메시지 영역을 버튼 아래로 이동
+        if 'add_message' in st.session_state and st.session_state.add_message:
+            msg_type, msg_text = st.session_state.add_message
+            if msg_type == 'success':
+                if lottie_fireworks:
+                    st_lottie(lottie_fireworks, height=300, key="ai_fireworks")
+                st.success(msg_text, icon="✅")
+            else:
+                st.error(msg_text, icon="🚫")
 
 # --- [Tab 2] 나의 도감 ---
 with tab2:
@@ -430,53 +448,62 @@ with tab2:
     else:
         st.info("아직 기록된 새가 없습니다. 첫 새를 등록해보세요!")
 
-# --- [Tab 3] 배지 도감 (⭐️ UI 개편: 박스 전체 색상 적용) ---
+# --- [Tab 3] 배지 도감 ---
 with tab3:
     st.subheader("🏆 배지 도감")
     st.caption("탐조 활동을 통해 얻을 수 있는 모든 배지와 조건입니다.")
-    
     sorted_badges = sorted(BADGE_INFO.keys(), key=lambda x: BADGE_INFO[x]['rank'])
-    
     for badge_name in sorted_badges:
         info = BADGE_INFO[badge_name]
         is_earned = badge_name in current_badges
         style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
         
-        # 1. 이름 분리 (아이콘/텍스트)
+        # 이름 분리
         parts = badge_name.split(" ", 1)
         icon_emoji = parts[0] if len(parts) > 0 else "🏅"
         clean_name = parts[1] if len(parts) > 1 else badge_name
         
-        # 2. 스타일 결정
-        # 획득 시: 테두리와 배경색(연한 톤) 적용
-        # 미획득: 회색 테두리, 흰 배경, 흑백 필터, 반투명
-        
-        border_color = style['border'] if is_earned else "#e0e0e0"
+        # 스타일 결정
+        border_color = style.get('border', '#e0e0e0')
         bg_color = style['bg'] if is_earned else "#ffffff"
         opacity = "1.0" if is_earned else "0.6"
         grayscale = "0%" if is_earned else "100%"
         text_color = "#333333" if is_earned else "#999999"
         
-        # 3. HTML 카드 렌더링
-        st.markdown(f"""
-        <div style="
-            border: 2px solid {border_color};
-            background-color: {bg_color};
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            opacity: {opacity};
-            filter: grayscale({grayscale});
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        ">
-            <div style="font-size: 3rem; margin-right: 15px;">{icon_emoji}</div>
-            <div>
-                <div style="font-weight: bold; font-size: 1.1rem; color: {text_color};">
-                    {clean_name} <span style="font-size: 0.8rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 5px; padding: 2px 5px; margin-left: 5px;">{style['label']}</span>
+        with st.container(border=True):
+            c1, c2 = st.columns([0.25, 0.75])
+            with c1:
+                st.markdown(f"""
+                <div style="
+                    display: flex; justify-content: center; align-items: center;
+                    width: 70px; height: 70px;
+                    border-radius: 50%;
+                    border: 3px solid {style['color']};
+                    background-color: {style['bg']};
+                    font-size: 35px;
+                    opacity: {opacity};
+                    filter: grayscale({grayscale});
+                    margin: auto;
+                ">
+                    {icon_emoji}
                 </div>
-                <div style="font-size: 0.9rem; color: #666;">{info['desc']}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"""
+                <div style="
+                    border: 2px solid {border_color};
+                    background-color: {bg_color};
+                    border-radius: 10px;
+                    padding: 10px;
+                    opacity: {opacity};
+                    filter: grayscale({grayscale});
+                ">
+                    <div style="font-weight: bold; font-size: 1.1rem; color: {text_color}; margin-bottom: 4px;">
+                        {clean_name} 
+                        <span style="font-size: 0.75rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 6px; padding: 2px 6px; margin-left: 6px; vertical-align: middle;">
+                            {style['label']}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #666; line-height: 1.4;">{info['desc']}</div>
+                </div>
+                """, unsafe_allow_html=True)
