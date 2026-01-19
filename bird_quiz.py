@@ -61,7 +61,7 @@ div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5
     color: #555 !important;
 }
 
-/* ⭐️ 레벨업 바 스타일 */
+/* 레벨업 바 스타일 */
 .level-container {
     background-color: white;
     padding: 15px;
@@ -85,24 +85,26 @@ except:
 
 # --- [2. 데이터 및 설정] ---
 ACHIEVEMENT_INFO = {
-    "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 시작이 반입니다.", "rank": 1},
-    "🌱 새싹 탐조가": {"tier": "rare", "desc": "5마리의 새를 만났습니다.", "rank": 1.5},
-    "🥉 아마추어 탐조가": {"tier": "rare", "desc": "20마리 수집! 동네 새들은 다 꿰뚫고 계시군요.", "rank": 2},
-    "🥈 베테랑 탐조가": {"tier": "epic", "desc": "50마리 수집! 어디 가서 '새 좀 안다'고 하셔도 됩니다.", "rank": 3},
-    "🥇 마스터 탐조가": {"tier": "unique", "desc": "100마리 수집! 진정한 고수의 반열에 올랐습니다.", "rank": 4},
-    "💎 전설의 탐조가": {"tier": "legendary", "desc": "300마리 수집! 당신은 살아있는 도감 그 자체입니다.", "rank": 5},
+    "🐣 탐조 입문": {"tier": "rare", "desc": "첫 번째 새를 기록했습니다! 위대한 여정의 시작입니다.", "rank": 1},
+    "🌱 새싹 탐조가": {"tier": "rare", "desc": "10마리의 새를 만났습니다. 이제 쌍안경이 익숙해지셨나요?", "rank": 1.5},
+    "🥉 아마추어 탐조가": {"tier": "rare", "desc": "50마리 수집! 동네 새들은 다 꿰뚫고 계시군요.", "rank": 2},
+    "🥈 베테랑 탐조가": {"tier": "epic", "desc": "150마리 수집! 웬만한 도감은 필요 없는 수준입니다.", "rank": 3},
+    "🥇 마스터 탐조가": {"tier": "unique", "desc": "300마리 수집! 학계에 보고해도 될 정도의 열정입니다.", "rank": 4},
+    "💎 전설의 탐조가": {"tier": "legendary", "desc": "500마리 수집! 당신은 살아있는 전설입니다.", "rank": 5},
     
-    "🌈 다채로운 시선": {"tier": "unique", "desc": "15개 이상의 서로 다른 '과(Family)'를 기록했습니다. 편식 없는 탐조!", "rank": 4},
-    "🦆 호수의 지배자": {"tier": "epic", "desc": "오리과 10마리 이상 수집", "rank": 3},
-    "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리과/매과) 5마리 이상 수집.", "rank": 4},
+    "🌈 다채로운 시선": {"tier": "unique", "desc": "20개 이상의 서로 다른 '과(Family)'를 기록했습니다. 편식 없는 탐조!", "rank": 4},
+    "🦆 호수의 지배자": {"tier": "epic", "desc": "오리과 15마리 이상 수집. 겨울철 탐조의 고수!", "rank": 3},
+    "🦅 하늘의 제왕": {"tier": "unique", "desc": "맹금류(수리/매) 10마리 이상 수집. 하늘의 포식자들을 정복했습니다.", "rank": 4},
     "🦢 우아한 백로": {"tier": "epic", "desc": "백로/왜가리과 5마리 이상 수집", "rank": 3},
     "🌲 숲속의 드러머": {"tier": "epic", "desc": "딱따구리과 3마리 이상 수집", "rank": 3},
-    "🦉 밤의 추적자": {"tier": "unique", "desc": "올빼미과(부엉이 등) 발견. 밤의 제왕을 만났습니다.", "rank": 4},
-    "🧠 똑똑한 새": {"tier": "rare", "desc": "까마귀과(까치, 어치 등) 3마리 이상 수집", "rank": 2},
+    # 🔥 [상향] 1마리 -> 3마리
+    "🦉 밤의 추적자": {"tier": "unique", "desc": "올빼미과(부엉이 등) 3마리 이상 수집. 어둠 속의 진정한 지배자입니다.", "rank": 4},
+    "🧠 똑똑한 새": {"tier": "rare", "desc": "까마귀과 3마리 이상 수집", "rank": 2},
     "👔 넥타이 신사": {"tier": "rare", "desc": "박새과 3마리 이상 수집", "rank": 2},
-    "🏖️ 갯벌의 나그네": {"tier": "epic", "desc": "도요/물떼새과 5마리 이상 수집", "rank": 3},
-    "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종 첫 발견! 엄청난 행운입니다.", "rank": 4},
-    "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 5마리 이상 기록. 당신은 자연의 지킴이입니다.", "rank": 5},
+    "🏖️ 갯벌의 나그네": {"tier": "epic", "desc": "도요/물떼새과 15마리 이상 수집. 식별 난이도 최상급을 정복했군요.", "rank": 3},
+    # 🔥 [상향] 1마리 -> 3마리
+    "🍀 럭키 탐조가": {"tier": "unique", "desc": "멸종위기종 3마리 이상 발견! 운도 실력입니다.", "rank": 4},
+    "🛡️ 자연의 수호자": {"tier": "legendary", "desc": "멸종위기종 10마리 이상 기록. 당신은 진정한 생태 지킴이입니다.", "rank": 5},
 }
 
 TIER_STYLE = {
@@ -200,34 +202,43 @@ def delete_birds(bird_names_to_delete, current_df):
 def calculate_achievements(df):
     achievements = []
     count = len(df)
-    if count >= 1: achievements.append("🐣 탐조 입문")
-    if count >= 5: achievements.append("🌱 새싹 탐조가")
-    if count >= 20: achievements.append("🥉 아마추어 탐조가")
-    if count >= 50: achievements.append("🥈 베테랑 탐조가")
-    if count >= 100: achievements.append("🥇 마스터 탐조가")
-    if count >= 300: achievements.append("💎 전설의 탐조가")
     
+    # 1. 수집 개수
+    if count >= 1: achievements.append("🐣 탐조 입문")
+    if count >= 10: achievements.append("🌱 새싹 탐조가")
+    if count >= 50: achievements.append("🥉 아마추어 탐조가")
+    if count >= 150: achievements.append("🥈 베테랑 탐조가")
+    if count >= 300: achievements.append("🥇 마스터 탐조가")
+    if count >= 500: achievements.append("💎 전설의 탐조가")
+    
+    # 2. 과별 & 희귀종 (난이도 상향 적용)
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
-        if df['family'].nunique() >= 15: achievements.append("🌈 다채로운 시선")
-        if fam_counts.get('오리과', 0) >= 10: achievements.append("🦆 호수의 지배자")
-        if fam_counts.get('수리과', 0) + fam_counts.get('매과', 0) >= 5: achievements.append("🦅 하늘의 제왕")
+        
+        if df['family'].nunique() >= 20: achievements.append("🌈 다채로운 시선")
+        if fam_counts.get('오리과', 0) >= 15: achievements.append("🦆 호수의 지배자")
+        if fam_counts.get('수리과', 0) + fam_counts.get('매과', 0) >= 10: achievements.append("🦅 하늘의 제왕")
         if fam_counts.get('백로과', 0) >= 5: achievements.append("🦢 우아한 백로")
         if fam_counts.get('딱다구리과', 0) >= 3: achievements.append("🌲 숲속의 드러머")
-        if fam_counts.get('올빼미과', 0) >= 1: achievements.append("🦉 밤의 추적자")
+        
+        # 🔥 [상향] 야행성 추적자: 올빼미과 3마리 이상
+        if fam_counts.get('올빼미과', 0) >= 3: achievements.append("🦉 밤의 추적자")
+            
         if fam_counts.get('까마귀과', 0) >= 3: achievements.append("🧠 똑똑한 새")
         if fam_counts.get('박새과', 0) >= 3: achievements.append("👔 넥타이 신사")
-        if fam_counts.get('도요과', 0) >= 5: achievements.append("🏖️ 갯벌의 나그네")
+        if fam_counts.get('도요과', 0) >= 15: achievements.append("🏖️ 갯벌의 나그네")
     
     rare_count = 0
     for name in df['bird_name']:
         if name in RARE_BIRDS: rare_count += 1
-    if rare_count >= 1: achievements.append("🍀 럭키 탐조가")
-    if rare_count >= 5: achievements.append("🛡️ 자연의 수호자")
+    # 🔥 [상향] 럭키 탐조가: 3마리 이상
+    if rare_count >= 3: achievements.append("🍀 럭키 탐조가")
+    if rare_count >= 10: achievements.append("🛡️ 자연의 수호자")
+    
     return achievements
 
-# ⭐️ [신규 기능] 경험치 및 레벨 계산 함수
+# 경험치 및 레벨 계산 함수
 def calculate_xp_and_level(df, achievements):
     total_xp = 0
     
@@ -245,7 +256,6 @@ def calculate_xp_and_level(df, achievements):
     total_xp += len(achievements) * 50
     
     # 3. 레벨 계산 (레벨당 100XP 필요)
-    # 레벨 1부터 시작. 0~99: Lv1, 100~199: Lv2 ...
     level = (total_xp // 100) + 1
     current_xp_in_level = total_xp % 100
     next_level_xp = 100
@@ -276,12 +286,12 @@ if 'my_achievements' not in st.session_state:
 newly_earned = list(set(current_achievements) - set(st.session_state['my_achievements']))
 st.session_state['my_achievements'] = current_achievements
 
-# ⭐️ [레벨 계산]
+# 레벨 계산
 level, curr_xp, req_xp, total_xp = calculate_xp_and_level(df, current_achievements)
 
 # 사이드바
 with st.sidebar:
-    # ⭐️ [레벨 표시 UI]
+    # 레벨 표시 UI
     st.markdown(f"""
     <div class="level-container">
         <p class="level-text">Lv. {level}</p>
@@ -566,14 +576,18 @@ with tab2:
                 
                 record_date = row.get('date', '')
                 
-                st.markdown(f"""<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
-    <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
-        <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
-        {rare_tag}
-    </div>
-    <div style="font-size:0.8rem; color:#999;">{record_date}</div>
-</div>""", unsafe_allow_html=True)
+                # HTML 들여쓰기 제거 및 한줄 처리 (오류 방지)
+                row_html = (
+                    f'<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">'
+                    f'<div style="display:flex; align-items:center; gap:12px;">'
+                    f'<span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>'
+                    f'<span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>'
+                    f'{rare_tag}'
+                    f'</div>'
+                    f'<div style="font-size:0.8rem; color:#999;">{record_date}</div>'
+                    f'</div>'
+                )
+                st.markdown(row_html, unsafe_allow_html=True)
             
             st.caption(f"총 {total_items}마리 중 {start_idx+1}~{min(end_idx, total_items)}번째 표시")
 
