@@ -10,7 +10,7 @@ import time
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
 
-# CSS: 깔끔한 UI 스타일 + 사이드바 가독성 개선
+# CSS: 깔끔한 UI 스타일 + 사이드바 가독성 개선 + 레벨바 스타일
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -60,6 +60,19 @@ div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5
     font-size: 0.9rem !important;
     color: #555 !important;
 }
+
+/* ⭐️ 레벨업 바 스타일 */
+.level-container {
+    background-color: white;
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #FFD700;
+    text-align: center;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.level-text { font-size: 1.5rem; font-weight: 900; color: #333; margin: 0; }
+.xp-text { font-size: 0.9rem; color: #666; margin-bottom: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -187,7 +200,6 @@ def delete_birds(bird_names_to_delete, current_df):
 def calculate_achievements(df):
     achievements = []
     count = len(df)
-    
     if count >= 1: achievements.append("🐣 탐조 입문")
     if count >= 5: achievements.append("🌱 새싹 탐조가")
     if count >= 20: achievements.append("🥉 아마추어 탐조가")
@@ -198,7 +210,6 @@ def calculate_achievements(df):
     if not df.empty and FAMILY_MAP:
         df['family'] = df['bird_name'].map(FAMILY_MAP)
         fam_counts = df['family'].value_counts()
-        
         if df['family'].nunique() >= 15: achievements.append("🌈 다채로운 시선")
         if fam_counts.get('오리과', 0) >= 10: achievements.append("🦆 호수의 지배자")
         if fam_counts.get('수리과', 0) + fam_counts.get('매과', 0) >= 5: achievements.append("🦅 하늘의 제왕")
@@ -214,8 +225,32 @@ def calculate_achievements(df):
         if name in RARE_BIRDS: rare_count += 1
     if rare_count >= 1: achievements.append("🍀 럭키 탐조가")
     if rare_count >= 5: achievements.append("🛡️ 자연의 수호자")
-    
     return achievements
+
+# ⭐️ [신규 기능] 경험치 및 레벨 계산 함수
+def calculate_xp_and_level(df, achievements):
+    total_xp = 0
+    
+    # 1. 새 등록 경험치
+    if not df.empty:
+        for name in df['bird_name']:
+            if name in RARE_BIRDS:
+                rarity = RARE_BIRDS[name]
+                if rarity == "class1": total_xp += 50
+                else: total_xp += 30 # class2 or natural
+            else:
+                total_xp += 10 # 일반 새
+    
+    # 2. 업적 달성 경험치
+    total_xp += len(achievements) * 50
+    
+    # 3. 레벨 계산 (레벨당 100XP 필요)
+    # 레벨 1부터 시작. 0~99: Lv1, 100~199: Lv2 ...
+    level = (total_xp // 100) + 1
+    current_xp_in_level = total_xp % 100
+    next_level_xp = 100
+    
+    return level, current_xp_in_level, next_level_xp, total_xp
 
 def analyze_bird_image(image, user_doubt=None):
     try:
@@ -234,14 +269,29 @@ st.title("📚 탐조 도감")
 df = get_data()
 current_achievements = calculate_achievements(df)
 
+# 배지(업적) 획득 감지
 if 'my_achievements' not in st.session_state:
     st.session_state['my_achievements'] = current_achievements
 
 newly_earned = list(set(current_achievements) - set(st.session_state['my_achievements']))
 st.session_state['my_achievements'] = current_achievements
 
+# ⭐️ [레벨 계산]
+level, curr_xp, req_xp, total_xp = calculate_xp_and_level(df, current_achievements)
+
 # 사이드바
 with st.sidebar:
+    # ⭐️ [레벨 표시 UI]
+    st.markdown(f"""
+    <div class="level-container">
+        <p class="level-text">Lv. {level}</p>
+        <p class="xp-text">EXP: {curr_xp} / {req_xp} <span style="font-size:0.8em; color:#999;">(Total: {total_xp})</span></p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.progress(curr_xp / req_xp)
+    
+    st.divider()
+    
     st.header("🏆 업적 현황")
     if current_achievements:
         badge_html_parts = []
@@ -452,7 +502,7 @@ with tab1:
                 placeholder.empty()
                 st.session_state.add_message = None
 
-# --- [Tab 2] 나의 도감 (✨ 페이징 & 편집 모드) ---
+# --- [Tab 2] 나의 도감 ---
 with tab2:
     st.subheader("📜 나의 탐조 목록")
     
@@ -516,18 +566,14 @@ with tab2:
                 
                 record_date = row.get('date', '')
                 
-                # ⭐️ [UI Fix] 한 줄로 이어붙여서 마크다운 해석 오류 방지
-                row_html = (
-                    f'<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">'
-                    f'<div style="display:flex; align-items:center; gap:12px;">'
-                    f'<span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>'
-                    f'<span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>'
-                    f'{rare_tag}'
-                    f'</div>'
-                    f'<div style="font-size:0.8rem; color:#999;">{record_date}</div>'
-                    f'</div>'
-                )
-                st.markdown(row_html, unsafe_allow_html=True)
+                st.markdown(f"""<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
+    <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>
+        <span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>
+        {rare_tag}
+    </div>
+    <div style="font-size:0.8rem; color:#999;">{record_date}</div>
+</div>""", unsafe_allow_html=True)
             
             st.caption(f"총 {total_items}마리 중 {start_idx+1}~{min(end_idx, total_items)}번째 표시")
 
