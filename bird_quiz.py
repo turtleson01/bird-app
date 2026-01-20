@@ -2,15 +2,18 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import google.generativeai as genai
-from PIL import Image
+from PIL import Image, ExifTags
 from datetime import datetime
 import os
 import time
+import folium
+from streamlit_folium import st_folium
+from folium.plugins import MarkerCluster
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
 
-# CSS: 깔끔한 UI 스타일
+# CSS: UI 스타일
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -44,7 +47,7 @@ div.stButton > button[kind="primary"] { background: linear-gradient(45deg, #64B5
 [data-testid="stFileUploaderDropzone"] button { display: none !important; }
 [data-testid="stFileUploaderDropzone"] section { cursor: pointer; }
 
-/* 사이드바 Expander 스타일 개선 */
+/* 사이드바 Expander 스타일 */
 [data-testid="stSidebar"] [data-testid="stExpander"] {
     background-color: white !important;
     border-radius: 8px !important;
@@ -165,26 +168,66 @@ def load_bird_map():
 BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS, FAMILY_GROUPS = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# ⭐️ [지도] GPS 좌표 추출 함수
+def get_gps_from_image(image):
+    try:
+        exif_data = image._getexif()
+        if not exif_data: return None, None
+        
+        gps_info = {}
+        for tag, value in exif_data.items():
+            decoded = ExifTags.TAGS.get(tag, tag)
+            if decoded == "GPSInfo":
+                gps_info = value
+                break
+        
+        if not gps_info: return None, None
+
+        def convert_to_degrees(value):
+            d, m, s = value
+            return d + (m / 60.0) + (s / 3600.0)
+
+        lat = convert_to_degrees(gps_info[2])
+        lon = convert_to_degrees(gps_info[4])
+        
+        if gps_info[1] == 'S': lat = -lat
+        if gps_info[3] == 'W': lon = -lon
+        
+        return lat, lon
+    except:
+        return None, None
+
 def get_data():
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        expected_cols = ['No', 'bird_name', 'sex', 'date']
+        # ⭐️ [지도] 위치 데이터 컬럼 추가 (lat, lon, location)
+        expected_cols = ['No', 'bird_name', 'sex', 'date', 'lat', 'lon', 'location']
         if df.empty: return pd.DataFrame(columns=expected_cols)
+        
+        # 없는 컬럼 채워주기 (구형 데이터 호환)
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = None
+                
         if 'sex' not in df.columns: df['sex'] = '미구분'
         if BIRD_MAP and 'bird_name' in df.columns:
             df['real_no'] = df['bird_name'].apply(lambda x: BIRD_MAP.get(str(x).strip(), 9999))
             df = df.sort_values(by='real_no', ascending=True)
         return df
-    except: return pd.DataFrame(columns=['No', 'bird_name', 'sex', 'date'])
+    except: return pd.DataFrame(columns=['No', 'bird_name', 'sex', 'date', 'lat', 'lon', 'location'])
 
-def save_data(bird_name, sex, current_df):
+# ⭐️ [지도] 저장 함수 업데이트 (위치 정보 포함)
+def save_data(bird_name, sex, current_df, lat=None, lon=None, location=None):
     bird_name = bird_name.strip()
     if bird_name not in BIRD_MAP: return f"⚠️ '{bird_name}'은(는) 목록에 없습니다."
     if not current_df.empty and bird_name in current_df['bird_name'].values: return "이미 등록된 새입니다."
     try:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         real_no = BIRD_MAP.get(bird_name)
-        new_row = pd.DataFrame({'No': [real_no], 'bird_name': [bird_name], 'sex': [sex], 'date': [now]})
+        new_row = pd.DataFrame({
+            'No': [real_no], 'bird_name': [bird_name], 'sex': [sex], 'date': [now],
+            'lat': [lat], 'lon': [lon], 'location': [location]
+        })
         updated_df = pd.concat([current_df, new_row], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_df)
         return True
@@ -200,6 +243,7 @@ def delete_birds(bird_names_to_delete, current_df):
 def calculate_achievements(df):
     achievements = []
     count = len(df)
+    
     if count >= 1: achievements.append("🐣 탐조 입문")
     if count >= 10: achievements.append("🌱 새싹 탐조가")
     if count >= 50: achievements.append("🥉 아마추어 탐조가")
@@ -229,23 +273,18 @@ def calculate_achievements(df):
     
     return achievements
 
-# ⭐️ [신규] 과별 이모지 반환 함수
 def get_family_emoji(bird_name):
-    if bird_name not in FAMILY_MAP:
-        return "🐦"
-    
+    if bird_name not in FAMILY_MAP: return "🐦"
     family = FAMILY_MAP[bird_name]
-    
     if "오리" in family or "기러기" in family or "고니" in family: return "🦆"
     if "수리" in family or "매과" in family: return "🦅"
     if "올빼미" in family: return "🦉"
     if "백로" in family or "왜가리" in family or "두루미" in family or "황새" in family: return "🦢"
     if "닭" in family or "꿩" in family: return "🐓"
     if "비둘기" in family: return "🕊️"
-    if "딱다구리" in family: return "🪵" # 딱따구리는 나무
+    if "딱다구리" in family: return "🪵"
     if "도요" in family or "물떼새" in family: return "🏖️"
-    
-    return "🐦" # 기본값
+    return "🐦"
 
 def calculate_xp_and_level(df, achievements):
     total_xp = 0
@@ -382,9 +421,10 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # 탭 메뉴
-tab1, tab2, tab3 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 업적 도감"])
+# ⭐️ [지도] 탭 추가 (Tab 4)
+tab1, tab2, tab3, tab4 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 업적 도감", "🗺️ 탐조 지도"])
 
-# --- [Tab 1] 종 추가 ---
+# --- [Tab 1] 종 추가 (⭐️ 지도/GPS 기능 추가) ---
 with tab1:
     st.subheader("✍️ 새로운 새 기록하기")
     input_method = st.radio("입력 방식 선택", ["📝 직접 이름 입력", "📸 AI 사진 분석"], horizontal=True)
@@ -392,13 +432,25 @@ with tab1:
     if input_method == "📝 직접 이름 입력":
         sex_selection = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key="manual_sex")
         
+        # ⭐️ 직접 입력 시에도 위치 지정 가능하게 (선택사항)
+        with st.expander("📍 위치 정보 추가 (선택)"):
+            st.caption("지도에서 위치를 클릭하세요.")
+            m = folium.Map(location=[36.5, 127.5], zoom_start=7)
+            output = st_folium(m, width=700, height=300)
+            
+            lat, lon = None, None
+            if output['last_clicked']:
+                lat = output['last_clicked']['lat']
+                lon = output['last_clicked']['lng']
+                st.success(f"위치 선택됨: {lat:.4f}, {lon:.4f}")
+
         def add_manual():
             name = st.session_state.input_bird.strip()
             sex = st.session_state.manual_sex 
             st.session_state.input_bird = ""
             
             if name:
-                res = save_data(name, sex, df)
+                res = save_data(name, sex, df, lat=lat, lon=lon)
                 if res is True: 
                     msg = f"{name}({sex}) 등록 완료!"
                     if name in RARE_BIRDS: msg += f" ({RARE_LABEL.get(RARE_BIRDS[name])} 발견!)"
@@ -418,12 +470,10 @@ with tab1:
                 if newly_earned:
                     for b in newly_earned:
                         badge_placeholder.info(f"🏆 **업적 달성!** [{b}]", icon="🎉")
-                
                 time.sleep(3)
                 placeholder.empty()
                 badge_placeholder.empty()
                 st.session_state.add_message = None
-                
             else:
                 placeholder.error(msg_text, icon="🚫")
                 time.sleep(3)
@@ -438,9 +488,24 @@ with tab1:
             for file in uploaded_files:
                 if file.name not in st.session_state.ai_results:
                     with st.spinner(f"🔍 {file.name} 분석 중..."):
-                        st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file))
+                        # AI 분석
+                        img_obj = Image.open(file)
+                        analysis_result = analyze_bird_image(img_obj)
+                        
+                        # ⭐️ GPS 추출
+                        gps_lat, gps_lon = get_gps_from_image(img_obj)
+                        
+                        st.session_state.ai_results[file.name] = {
+                            "text": analysis_result,
+                            "lat": gps_lat,
+                            "lon": gps_lon
+                        }
                 
-                raw = st.session_state.ai_results[file.name]
+                result_data = st.session_state.ai_results[file.name]
+                raw = result_data["text"]
+                gps_lat = result_data["lat"]
+                gps_lon = result_data["lon"]
+
                 if "|" in raw:
                     parts = raw.split("|", 1)
                     bird_name = parts[0].strip()
@@ -467,12 +532,27 @@ with tab1:
                             st.markdown(f"### **{display_name}**", unsafe_allow_html=True)
                             st.markdown(f"**🔍 판단 이유**")
                             st.info(reason)
+                            
+                            # ⭐️ 위치 정보 확인 및 수정 UI
+                            final_lat, final_lon = gps_lat, gps_lon
+                            
+                            if gps_lat and gps_lon:
+                                st.success(f"📍 사진에서 위치정보 발견! ({gps_lat:.4f}, {gps_lon:.4f})")
+                            else:
+                                st.warning("📍 사진에 위치정보가 없습니다. 아래 지도에서 위치를 지정해주세요.")
+                                m_pick = folium.Map(location=[36.5, 127.5], zoom_start=7)
+                                picked_loc = st_folium(m_pick, width='100%', height=200, key=f"map_{file.name}")
+                                if picked_loc['last_clicked']:
+                                    final_lat = picked_loc['last_clicked']['lat']
+                                    final_lon = picked_loc['last_clicked']['lng']
+                                    st.info(f"선택된 위치: {final_lat:.4f}, {final_lon:.4f}")
+
                             col_sex, col_btn = st.columns([1, 1])
                             with col_sex:
                                 ai_sex = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key=f"sex_{file.name}", label_visibility="collapsed")
                             with col_btn:
                                 if st.button(f"도감에 등록하기", key=f"reg_{file.name}", type="primary", use_container_width=True):
-                                    res = save_data(bird_name, ai_sex, df)
+                                    res = save_data(bird_name, ai_sex, df, lat=final_lat, lon=final_lon)
                                     if res is True: 
                                         st.session_state.add_message = ('success', f"✅ {bird_name}({ai_sex}) 등록 성공!")
                                         st.rerun()
@@ -486,20 +566,29 @@ with tab1:
                         if c_ask2.button("재분석", key=f"ask_{file.name}", use_container_width=True):
                             if user_opinion:
                                 with st.spinner("재분석 중..."):
-                                    st.session_state.ai_results[file.name] = analyze_bird_image(Image.open(file), user_opinion)
+                                    # 재분석 시 이미지 다시 로드 필요
+                                    img_obj = Image.open(file)
+                                    # 기존 위치 정보 유지
+                                    old_lat = st.session_state.ai_results[file.name]["lat"]
+                                    old_lon = st.session_state.ai_results[file.name]["lon"]
+                                    
+                                    new_result = analyze_bird_image(img_obj, user_opinion)
+                                    st.session_state.ai_results[file.name] = {
+                                        "text": new_result,
+                                        "lat": old_lat,
+                                        "lon": old_lon
+                                    }
                                     st.rerun()
         
         if 'add_message' in st.session_state and st.session_state.add_message:
             msg_type, msg_text = st.session_state.add_message
             placeholder = st.empty()
-            
             if msg_type == 'success':
                 placeholder.success(msg_text, icon="✅")
                 badge_placeholder = st.empty()
                 if newly_earned:
                     for b in newly_earned:
                         badge_placeholder.info(f"🏆 **업적 달성!** [{b}]", icon="🎉")
-                
                 time.sleep(3)
                 placeholder.empty()
                 badge_placeholder.empty()
@@ -573,19 +662,25 @@ with tab2:
                     rare_tag = f"<span class='rare-tag {tag_class}'>{tag_text}</span>"
                 
                 record_date = row.get('date', '')
-                
-                # ⭐️ [UI Fix] 이모지 추가 반영
                 family_emoji = get_family_emoji(bird)
                 
+                # 지도 아이콘 표시 (위치정보 있으면)
+                loc_icon = ""
+                if pd.notnull(row.get('lat')) and pd.notnull(row.get('lon')):
+                    loc_icon = "📍"
+
                 row_html = (
                     f'<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">'
                     f'<div style="display:flex; align-items:center; gap:12px;">'
                     f'<span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>'
-                    f'<span style="font-size:1.5rem;">{family_emoji}</span>' # 이모지 추가
+                    f'<span style="font-size:1.5rem;">{family_emoji}</span>'
                     f'<span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>'
                     f'{rare_tag}'
                     f'</div>'
-                    f'<div style="font-size:0.8rem; color:#999;">{record_date}</div>'
+                    f'<div style="display:flex; align-items:center; gap:5px;">'
+                    f'<span style="font-size:1rem;">{loc_icon}</span>'
+                    f'<span style="font-size:0.8rem; color:#999;">{record_date}</span>'
+                    f'</div>'
                     f'</div>'
                 )
                 st.markdown(row_html, unsafe_allow_html=True)
@@ -638,3 +733,55 @@ with tab3:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+# --- [Tab 4] 🗺️ 탐조 지도 (신규 기능) ---
+with tab4:
+    st.subheader("🗺️ 나만의 탐조 지도")
+    
+    # 위치 정보가 있는 데이터만 필터링
+    if not df.empty and 'lat' in df.columns and 'lon' in df.columns:
+        map_df = df.dropna(subset=['lat', 'lon'])
+        
+        if not map_df.empty:
+            # 1. 지도 중심 잡기 (평균 좌표)
+            center_lat = map_df['lat'].mean()
+            center_lon = map_df['lon'].mean()
+            m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
+            
+            # 2. 마커 클러스터 생성 (많으면 묶어서 보여줌)
+            marker_cluster = MarkerCluster().add_to(m)
+            
+            # 3. 마커 찍기
+            for idx, row in map_df.iterrows():
+                bird = row['bird_name']
+                date = row['date']
+                family_icon = get_family_emoji(bird)
+                
+                # 팝업 내용 (HTML)
+                popup_html = f"""
+                <div style="width:150px; text-align:center;">
+                    <div style="font-size:20px;">{family_icon}</div>
+                    <b>{bird}</b><br>
+                    <span style="font-size:12px; color:#555;">{date}</span>
+                </div>
+                """
+                
+                folium.Marker(
+                    location=[row['lat'], row['lon']],
+                    popup=folium.Popup(popup_html, max_width=200),
+                    tooltip=bird
+                ).add_to(marker_cluster)
+            
+            # 4. 지도 출력
+            st_folium(m, width='100%', height=500)
+            
+            # 5. 통계
+            st.info(f"총 {len(map_df)}개의 위치 기록이 지도에 표시되었습니다.")
+            
+        else:
+            st.warning("📍 위치 정보가 포함된 기록이 없습니다. 사진을 등록할 때 위치를 추가해보세요!")
+            # 기본 지도 표시 (한국)
+            m_default = folium.Map(location=[36.5, 127.5], zoom_start=6)
+            st_folium(m_default, width='100%', height=400)
+    else:
+        st.info("아직 데이터가 없습니다.")
