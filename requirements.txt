@@ -1,6 +1,8 @@
 streamlit
 pandas
-st-gsheets-connection
+streamlit-gsheets
 google-generativeai>=0.7.0
-streamlit-lottie
 requests
+Pillow
+folium
+streamlit-folium
