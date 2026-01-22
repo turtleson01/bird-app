@@ -8,7 +8,7 @@ import os
 import time
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster
+from folium.plugins import MarkerCluster, Geocoder # ⭐️ Geocoder 추가됨
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
@@ -168,7 +168,6 @@ def load_bird_map():
 BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS, FAMILY_GROUPS = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# ⭐️ [지도] GPS 좌표 추출 함수
 def get_gps_from_image(image):
     try:
         exif_data = image._getexif()
@@ -200,11 +199,9 @@ def get_gps_from_image(image):
 def get_data():
     try:
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        # ⭐️ [지도] 위치 데이터 컬럼 추가 (lat, lon, location)
         expected_cols = ['No', 'bird_name', 'sex', 'date', 'lat', 'lon', 'location']
         if df.empty: return pd.DataFrame(columns=expected_cols)
         
-        # 없는 컬럼 채워주기 (구형 데이터 호환)
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = None
@@ -216,7 +213,6 @@ def get_data():
         return df
     except: return pd.DataFrame(columns=['No', 'bird_name', 'sex', 'date', 'lat', 'lon', 'location'])
 
-# ⭐️ [지도] 저장 함수 업데이트 (위치 정보 포함)
 def save_data(bird_name, sex, current_df, lat=None, lon=None, location=None):
     bird_name = bird_name.strip()
     if bird_name not in BIRD_MAP: return f"⚠️ '{bird_name}'은(는) 목록에 없습니다."
@@ -421,10 +417,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # 탭 메뉴
-# ⭐️ [지도] 탭 추가 (Tab 4)
 tab1, tab2, tab3, tab4 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 업적 도감", "🗺️ 탐조 지도"])
 
-# --- [Tab 1] 종 추가 (⭐️ 지도/GPS 기능 추가) ---
+# --- [Tab 1] 종 추가 (⭐️ 지도 검색 추가) ---
 with tab1:
     st.subheader("✍️ 새로운 새 기록하기")
     input_method = st.radio("입력 방식 선택", ["📝 직접 이름 입력", "📸 AI 사진 분석"], horizontal=True)
@@ -432,10 +427,11 @@ with tab1:
     if input_method == "📝 직접 이름 입력":
         sex_selection = st.radio("성별", ["미구분", "수컷", "암컷"], horizontal=True, key="manual_sex")
         
-        # ⭐️ 직접 입력 시에도 위치 지정 가능하게 (선택사항)
         with st.expander("📍 위치 정보 추가 (선택)"):
-            st.caption("지도에서 위치를 클릭하세요.")
+            st.caption("돋보기 버튼으로 장소를 검색하거나 지도를 클릭하세요.")
+            # ⭐️ 검색 가능한 지도
             m = folium.Map(location=[36.5, 127.5], zoom_start=7)
+            Geocoder(add_marker=False).add_to(m) # 검색기 추가
             output = st_folium(m, width=700, height=300)
             
             lat, lon = None, None
@@ -488,11 +484,8 @@ with tab1:
             for file in uploaded_files:
                 if file.name not in st.session_state.ai_results:
                     with st.spinner(f"🔍 {file.name} 분석 중..."):
-                        # AI 분석
                         img_obj = Image.open(file)
                         analysis_result = analyze_bird_image(img_obj)
-                        
-                        # ⭐️ GPS 추출
                         gps_lat, gps_lon = get_gps_from_image(img_obj)
                         
                         st.session_state.ai_results[file.name] = {
@@ -533,14 +526,15 @@ with tab1:
                             st.markdown(f"**🔍 판단 이유**")
                             st.info(reason)
                             
-                            # ⭐️ 위치 정보 확인 및 수정 UI
                             final_lat, final_lon = gps_lat, gps_lon
                             
                             if gps_lat and gps_lon:
                                 st.success(f"📍 사진에서 위치정보 발견! ({gps_lat:.4f}, {gps_lon:.4f})")
                             else:
-                                st.warning("📍 사진에 위치정보가 없습니다. 아래 지도에서 위치를 지정해주세요.")
+                                st.warning("📍 위치 정보가 없습니다. 아래 지도에서 검색하거나 클릭하세요.")
+                                # ⭐️ AI 분석 모드에서도 검색 가능하게
                                 m_pick = folium.Map(location=[36.5, 127.5], zoom_start=7)
+                                Geocoder(add_marker=False).add_to(m_pick)
                                 picked_loc = st_folium(m_pick, width='100%', height=200, key=f"map_{file.name}")
                                 if picked_loc['last_clicked']:
                                     final_lat = picked_loc['last_clicked']['lat']
@@ -566,12 +560,9 @@ with tab1:
                         if c_ask2.button("재분석", key=f"ask_{file.name}", use_container_width=True):
                             if user_opinion:
                                 with st.spinner("재분석 중..."):
-                                    # 재분석 시 이미지 다시 로드 필요
                                     img_obj = Image.open(file)
-                                    # 기존 위치 정보 유지
                                     old_lat = st.session_state.ai_results[file.name]["lat"]
                                     old_lon = st.session_state.ai_results[file.name]["lon"]
-                                    
                                     new_result = analyze_bird_image(img_obj, user_opinion)
                                     st.session_state.ai_results[file.name] = {
                                         "text": new_result,
@@ -664,7 +655,6 @@ with tab2:
                 record_date = row.get('date', '')
                 family_emoji = get_family_emoji(bird)
                 
-                # 지도 아이콘 표시 (위치정보 있으면)
                 loc_icon = ""
                 if pd.notnull(row.get('lat')) and pd.notnull(row.get('lon')):
                     loc_icon = "📍"
@@ -734,30 +724,28 @@ with tab3:
         </div>
         """, unsafe_allow_html=True)
 
-# --- [Tab 4] 🗺️ 탐조 지도 (신규 기능) ---
+# --- [Tab 4] 🗺️ 탐조 지도 ---
 with tab4:
     st.subheader("🗺️ 나만의 탐조 지도")
     
-    # 위치 정보가 있는 데이터만 필터링
     if not df.empty and 'lat' in df.columns and 'lon' in df.columns:
         map_df = df.dropna(subset=['lat', 'lon'])
         
         if not map_df.empty:
-            # 1. 지도 중심 잡기 (평균 좌표)
             center_lat = map_df['lat'].mean()
             center_lon = map_df['lon'].mean()
             m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
             
-            # 2. 마커 클러스터 생성 (많으면 묶어서 보여줌)
+            # ⭐️ 지도 탭에서도 검색 기능 활성화
+            Geocoder(add_marker=False).add_to(m)
+
             marker_cluster = MarkerCluster().add_to(m)
             
-            # 3. 마커 찍기
             for idx, row in map_df.iterrows():
                 bird = row['bird_name']
                 date = row['date']
                 family_icon = get_family_emoji(bird)
                 
-                # 팝업 내용 (HTML)
                 popup_html = f"""
                 <div style="width:150px; text-align:center;">
                     <div style="font-size:20px;">{family_icon}</div>
@@ -772,15 +760,11 @@ with tab4:
                     tooltip=bird
                 ).add_to(marker_cluster)
             
-            # 4. 지도 출력
             st_folium(m, width='100%', height=500)
-            
-            # 5. 통계
             st.info(f"총 {len(map_df)}개의 위치 기록이 지도에 표시되었습니다.")
             
         else:
             st.warning("📍 위치 정보가 포함된 기록이 없습니다. 사진을 등록할 때 위치를 추가해보세요!")
-            # 기본 지도 표시 (한국)
             m_default = folium.Map(location=[36.5, 127.5], zoom_start=6)
             st_folium(m_default, width='100%', height=400)
     else:
