@@ -8,7 +8,8 @@ import os
 import time
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster, Geocoder # ⭐️ Geocoder 추가됨
+# ⭐️ LocateControl 추가됨
+from folium.plugins import MarkerCluster, Geocoder, LocateControl
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
@@ -419,7 +420,7 @@ st.markdown(f"""
 # 탭 메뉴
 tab1, tab2, tab3, tab4 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 업적 도감", "🗺️ 탐조 지도"])
 
-# --- [Tab 1] 종 추가 (⭐️ 지도 검색 추가) ---
+# --- [Tab 1] 종 추가 (⭐️ LocateControl 적용) ---
 with tab1:
     st.subheader("✍️ 새로운 새 기록하기")
     input_method = st.radio("입력 방식 선택", ["📝 직접 이름 입력", "📸 AI 사진 분석"], horizontal=True)
@@ -429,9 +430,12 @@ with tab1:
         
         with st.expander("📍 위치 정보 추가 (선택)"):
             st.caption("돋보기 버튼으로 장소를 검색하거나 지도를 클릭하세요.")
-            # ⭐️ 검색 가능한 지도
+            
             m = folium.Map(location=[36.5, 127.5], zoom_start=7)
-            Geocoder(add_marker=False).add_to(m) # 검색기 추가
+            # ⭐️ 기능 추가: 내 위치 + 검색기
+            LocateControl(auto_start=False).add_to(m) # 수동 모드에서는 자동이동 끔 (선택권)
+            Geocoder(add_marker=False).add_to(m) 
+            
             output = st_folium(m, width=700, height=300)
             
             lat, lon = None, None
@@ -532,9 +536,12 @@ with tab1:
                                 st.success(f"📍 사진에서 위치정보 발견! ({gps_lat:.4f}, {gps_lon:.4f})")
                             else:
                                 st.warning("📍 위치 정보가 없습니다. 아래 지도에서 검색하거나 클릭하세요.")
-                                # ⭐️ AI 분석 모드에서도 검색 가능하게
+                                
                                 m_pick = folium.Map(location=[36.5, 127.5], zoom_start=7)
+                                # ⭐️ AI 분석 모드 지도에도 기능 추가
+                                LocateControl(auto_start=False).add_to(m_pick)
                                 Geocoder(add_marker=False).add_to(m_pick)
+                                
                                 picked_loc = st_folium(m_pick, width='100%', height=200, key=f"map_{file.name}")
                                 if picked_loc['last_clicked']:
                                     final_lat = picked_loc['last_clicked']['lat']
@@ -736,7 +743,8 @@ with tab4:
             center_lon = map_df['lon'].mean()
             m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
             
-            # ⭐️ 지도 탭에서도 검색 기능 활성화
+            # ⭐️ 기능 추가: 내 위치 자동이동(True) + 검색기
+            LocateControl(auto_start=True).add_to(m)
             Geocoder(add_marker=False).add_to(m)
 
             marker_cluster = MarkerCluster().add_to(m)
@@ -766,6 +774,8 @@ with tab4:
         else:
             st.warning("📍 위치 정보가 포함된 기록이 없습니다. 사진을 등록할 때 위치를 추가해보세요!")
             m_default = folium.Map(location=[36.5, 127.5], zoom_start=6)
+            # 데이터 없어도 내 위치 기능은 활성화
+            LocateControl(auto_start=True).add_to(m_default)
             st_folium(m_default, width='100%', height=400)
     else:
         st.info("아직 데이터가 없습니다.")
