@@ -619,16 +619,19 @@ with tab2:
     max_bird_id = max(ID_TO_NAME.keys()) if ID_TO_NAME else 602
     my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
 
-    # 1. 자동 스크롤 트리거 (버튼 클릭 시 실행)
+    # 1. 자동 스크롤 트리거 (버튼 클릭 시 실행) - ⭐️ 수정된 부분
     if 'scroll_to_top' in st.session_state and st.session_state['scroll_to_top']:
-        # Streamlit iframe 외부(부모 창)의 스크롤을 최상단으로 이동
         components.html("""
             <script>
-                window.parent.scrollTo({ top: 0, behavior: 'smooth' });
+                // Streamlit 부모 창에서 h1 태그(메인 타이틀)를 찾아 거기로 부드럽게 이동합니다.
+                const topElement = window.parent.document.querySelector('h1');
+                if (topElement) {
+                    topElement.scrollIntoView({ behavior: 'smooth' });
+                }
             </script>
         """, height=0)
         st.session_state['scroll_to_top'] = False # 실행 후 플래그 초기화
-
+        
     # 2. 선택된 새 상세 정보 뷰
     if 'selected_bird_id' not in st.session_state:
         st.session_state['selected_bird_id'] = None
@@ -820,3 +823,4 @@ with tab4:
             st_folium(m_default, width='100%', height=400)
     else:
         st.info("아직 데이터가 없습니다.")
+
