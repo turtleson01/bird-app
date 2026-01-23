@@ -655,7 +655,7 @@ with tab2:
         st.divider()
 
     # 3. 페이지네이션 설정
-    items_per_page = 20 # 한 페이지에 20개씩 표시
+    items_per_page = 20 # 한 페이지에 20개씩 표시 (5x4 그리드)
     total_pages = max(1, (total_birds_count - 1) // items_per_page + 1)
     
     col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
@@ -665,8 +665,8 @@ with tab2:
     start_idx = (page - 1) * items_per_page + 1
     end_idx = min(start_idx + items_per_page, total_birds_count + 1)
 
-    # 4. 그리드 뷰 렌더링 (4열)
-    num_columns = 4
+    # ⭐️ 4. 그리드 뷰 렌더링 (가로 5열로 변경됨)
+    num_columns = 5
     grid_cols = st.columns(num_columns)
 
     # 현재 페이지에 해당하는 새 목록 루프
