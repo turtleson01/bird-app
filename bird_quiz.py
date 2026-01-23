@@ -597,95 +597,114 @@ with tab1:
                 placeholder.empty()
                 st.session_state.add_message = None
 
-# --- [Tab 2] 나의 도감 ---
+# --- [Tab 2] 나의 도감 (포켓몬 도감 스타일) ---
 with tab2:
-    st.subheader("📜 나의 탐조 목록")
-    
-    edit_mode = st.toggle("🛠️ 목록 관리 (삭제 모드)", key="edit_mode")
-    
-    if not df.empty:
-        if edit_mode:
-            st.caption("삭제할 항목을 선택(체크)하고 아래 버튼을 누르세요.")
-            df_to_edit = df.copy()
-            df_to_edit['삭제'] = False 
-            
-            cols = ['삭제'] + [c for c in df_to_edit.columns if c != '삭제']
-            df_to_edit = df_to_edit[cols]
-            
-            edited_df = st.data_editor(
-                df_to_edit,
-                hide_index=True,
-                column_config={
-                    "삭제": st.column_config.CheckboxColumn("삭제", help="체크하면 삭제됩니다.", default=False),
-                    "bird_name": "새 이름", "sex": "성별", "date": "기록 일시", "No": "번호"
-                },
-                use_container_width=True
-            )
-            
-            to_delete_list = edited_df[edited_df['삭제'] == True]['bird_name'].tolist()
-            if to_delete_list:
-                if st.button(f"선택한 {len(to_delete_list)}개 항목 영구 삭제", type="primary"):
-                    res = delete_birds(to_delete_list, df)
-                    if res is True:
-                        st.success("삭제되었습니다.")
-                        st.rerun()
-                    else:
-                        st.error(f"삭제 실패: {res}")
-        else:
-            items_per_page = 10
-            total_items = len(df)
-            total_pages = max(1, (total_items - 1) // items_per_page + 1)
-            
-            col_page1, col_page2 = st.columns([8, 2])
-            with col_page2:
-                page = st.number_input("페이지", min_value=1, max_value=total_pages, step=1, label_visibility="collapsed")
-            
-            start_idx = (page - 1) * items_per_page
-            end_idx = start_idx + items_per_page
-            page_df = df.iloc[start_idx:end_idx]
-            
-            for index, row in page_df.iterrows():
-                bird = row['bird_name']
-                real_no = BIRD_MAP.get(bird, 9999)
-                display_no = "??" if real_no == 9999 else real_no
-                sex_info = row.get('sex', '미구분')
-                sex_icon = ""
-                if sex_info == '수컷': sex_icon = " <span style='color:blue; font-size:1rem;'>(♂)</span>"
-                elif sex_info == '암컷': sex_icon = " <span style='color:red; font-size:1rem;'>(♀)</span>"
-                rare_tag = ""
-                if bird in RARE_BIRDS:
-                    rarity_code = RARE_BIRDS[bird]
-                    tag_class = f"tag-{rarity_code}"
-                    tag_text = RARE_LABEL.get(rarity_code, "").replace("👑 ", "").replace("⭐ ", "").replace("🌿 ", "")
-                    rare_tag = f"<span class='rare-tag {tag_class}'>{tag_text}</span>"
-                
-                record_date = row.get('date', '')
-                family_emoji = get_family_emoji(bird)
-                
-                loc_icon = ""
-                if pd.notnull(row.get('lat')) and pd.notnull(row.get('lon')):
-                    loc_icon = "📍"
+    st.subheader("📜 탐조 도감 (전체 목록)")
 
-                row_html = (
-                    f'<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">'
-                    f'<div style="display:flex; align-items:center; gap:12px;">'
-                    f'<span style="font-size:1.1rem; font-weight:600; color:#555; min-width:30px;">{display_no}.</span>'
-                    f'<span style="font-size:1.5rem;">{family_emoji}</span>'
-                    f'<span style="font-size:1.2rem; font-weight:bold; color:#333;">{bird}{sex_icon}</span>'
-                    f'{rare_tag}'
-                    f'</div>'
-                    f'<div style="display:flex; align-items:center; gap:5px;">'
-                    f'<span style="font-size:1rem;">{loc_icon}</span>'
-                    f'<span style="font-size:0.8rem; color:#999;">{record_date}</span>'
-                    f'</div>'
-                    f'</div>'
-                )
-                st.markdown(row_html, unsafe_allow_html=True)
-            
-            st.caption(f"총 {total_items}마리 중 {start_idx+1}~{min(end_idx, total_items)}번째 표시")
+    # 1. 데이터 준비: ID 기준 전체 목록 생성 (1번 ~ 끝번)
+    if 'ID_TO_NAME' not in st.session_state and BIRD_MAP:
+        # BIRD_MAP(이름:번호)을 역산하여 (번호:이름) 딕셔너리 생성
+        st.session_state['ID_TO_NAME'] = {v: k for k, v in BIRD_MAP.items()}
+    
+    id_to_name = st.session_state.get('ID_TO_NAME', {})
+    total_birds_count = len(id_to_name)
+    
+    # 내가 수집한 새 목록 (빠른 검색을 위해 set으로 변환)
+    my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
 
-    else:
-        st.info("아직 기록된 새가 없습니다. 첫 새를 등록해보세요!")
+    # 2. 선택된 새 상세 정보 뷰 (상단에 고정)
+    if 'selected_bird_id' not in st.session_state:
+        st.session_state['selected_bird_id'] = None
+
+    selected_id = st.session_state['selected_bird_id']
+    if selected_id and selected_id in id_to_name:
+        selected_name = id_to_name[selected_id]
+        is_caught = selected_name in my_collected_birds
+        
+        with st.container(border=True):
+            det_c1, det_c2 = st.columns([1, 3])
+            with det_c1:
+                if is_caught:
+                    st.markdown(f"<div style='text-align:center; font-size:5rem;'>{get_family_emoji(selected_name)}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='text-align:center; font-size:5rem; color:#ccc;'>❓</div>", unsafe_allow_html=True)
+            
+            with det_c2:
+                if is_caught:
+                    # 수집한 새의 정보 표시
+                    my_records = df[df['bird_name'] == selected_name]
+                    first_record = my_records.iloc[0]
+                    
+                    st.markdown(f"### No.{selected_id} {selected_name}")
+                    family = FAMILY_MAP.get(selected_name, '미상')
+                    st.caption(f"{family}")
+                    
+                    st.success(f"✅ **발견!** 총 {len(my_records)}회 기록됨")
+                    st.write(f"**최초 발견일:** {first_record['date']}")
+                    if pd.notnull(first_record.get('lat')):
+                        st.write(f"**최초 위치:** ({first_record['lat']:.4f}, {first_record['lon']:.4f})")
+                else:
+                    st.markdown(f"### No.{selected_id} {selected_name}")
+                    family = FAMILY_MAP.get(selected_name, '미상')
+                    st.caption(f"{family}")
+                    st.warning("🔒 아직 이 새를 만나지 못했습니다. (미발견)")
+            
+            if st.button("닫기 ✖️", key="close_detail"):
+                st.session_state['selected_bird_id'] = None
+                st.rerun()
+        st.divider()
+
+    # 3. 페이지네이션 설정
+    items_per_page = 20 # 한 페이지에 20개씩 표시
+    total_pages = max(1, (total_birds_count - 1) // items_per_page + 1)
+    
+    col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
+    with col_p2:
+        page = st.number_input("페이지 이동", min_value=1, max_value=total_pages, step=1, label_visibility="collapsed")
+    
+    start_idx = (page - 1) * items_per_page + 1
+    end_idx = min(start_idx + items_per_page, total_birds_count + 1)
+
+    # 4. 그리드 뷰 렌더링 (4열)
+    num_columns = 4
+    grid_cols = st.columns(num_columns)
+
+    # 현재 페이지에 해당하는 새 목록 루프
+    for i, current_id in enumerate(range(start_idx, end_idx)):
+        if current_id not in id_to_name: continue
+        bird_name = id_to_name[current_id]
+        is_caught = bird_name in my_collected_birds
+        
+        # 그리드 열 배정
+        col_idx = i % num_columns
+        
+        with grid_cols[col_idx]:
+            # 카드 스타일의 컨테이너
+            with st.container(border=True):
+                # 아이콘/이미지 (수집 여부에 따라 다르게 표시)
+                if is_caught:
+                    icon = get_family_emoji(bird_name)
+                    color = "#1b5e20" # 녹색 폰트
+                    bg_color = "#e8f5e9"
+                else:
+                    icon = "❓"
+                    color = "#999999" # 회색 폰트
+                    bg_color = "#f5f5f5"
+                
+                st.markdown(f"""
+                <div style='text-align:center; padding:10px; background-color:{bg_color}; border-radius:10px;'>
+                    <span style='font-size:2rem;'>{icon}</span><br>
+                    <span style='font-size:0.8rem; color:#666;'>No.{current_id}</span><br>
+                    <strong style='color:{color}; font-size:1rem;'>{bird_name if is_caught else '???'}</strong>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 버튼 (클릭 시 상세 정보 표시)
+                if st.button("자세히 보기", key=f"btn_{current_id}", use_container_width=True):
+                    st.session_state['selected_bird_id'] = current_id
+                    st.rerun()
+
+    st.caption(f"총 {total_birds_count}종 중 {start_idx} ~ {end_idx-1}번 표시")
 
 # --- [Tab 3] 업적 도감 ---
 with tab3:
