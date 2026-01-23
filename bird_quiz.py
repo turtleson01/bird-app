@@ -619,19 +619,18 @@ with tab2:
     max_bird_id = max(ID_TO_NAME.keys()) if ID_TO_NAME else 602
     my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
 
-    # 1. 자동 스크롤 트리거 (버튼 클릭 시 실행) - ⭐️ 수정된 부분
+    # 1. 자동 스크롤 트리거
     if 'scroll_to_top' in st.session_state and st.session_state['scroll_to_top']:
         components.html("""
             <script>
-                // Streamlit 부모 창에서 h1 태그(메인 타이틀)를 찾아 거기로 부드럽게 이동합니다.
                 const topElement = window.parent.document.querySelector('h1');
                 if (topElement) {
                     topElement.scrollIntoView({ behavior: 'smooth' });
                 }
             </script>
         """, height=0)
-        st.session_state['scroll_to_top'] = False # 실행 후 플래그 초기화
-        
+        st.session_state['scroll_to_top'] = False 
+
     # 2. 선택된 새 상세 정보 뷰
     if 'selected_bird_id' not in st.session_state:
         st.session_state['selected_bird_id'] = None
@@ -641,41 +640,45 @@ with tab2:
         selected_name = ID_TO_NAME[selected_id]
         is_caught = selected_name in my_collected_birds
         
+        # ⭐️ 도트 이미지 경로 확인
+        img_path = f"assets/sprites/{selected_id}.png"
+        has_image = os.path.exists(img_path)
+
         with st.container(border=True):
             det_c1, det_c2 = st.columns([1, 3])
             with det_c1:
-                if is_caught:
+                if is_caught and has_image:
+                    # ⭐️ 획득했고 사진도 있으면 도트 이미지 출력!
+                    st.image(img_path, use_container_width=True)
+                elif is_caught:
+                    # 획득은 했으나 사진이 없는 경우 (기존 이모지 대체)
                     st.markdown(f"<div style='text-align:center; font-size:5rem;'>{get_family_emoji(selected_name)}</div>", unsafe_allow_html=True)
                 else:
+                    # 미발견
                     st.markdown("<div style='text-align:center; font-size:5rem; color:#ccc;'>❓</div>", unsafe_allow_html=True)
             
             with det_c2:
-                # ⭐️ 멸종위기종/천연기념물 태그 HTML 생성
                 rarity_badge = ""
                 if selected_name in RARE_BIRDS:
                     r_code = RARE_BIRDS[selected_name]
                     r_label = RARE_LABEL.get(r_code, "")
-                    r_class = f"tag-{r_code}" # CSS 클래스 (tag-class1, tag-class2, tag-natural)
+                    r_class = f"tag-{r_code}" 
                     rarity_badge = f"<span class='rare-tag {r_class}'>{r_label}</span>"
 
                 if is_caught:
                     my_records = df[df['bird_name'] == selected_name]
                     first_record = my_records.iloc[0]
                     
-                    # 제목 옆에 배지 표시
                     st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
-                    family = FAMILY_MAP.get(selected_name, '미상')
-                    st.caption(f"{family}")
+                    st.caption(f"{FAMILY_MAP.get(selected_name, '미상')}")
                     
                     st.success(f"✅ **발견!** 총 {len(my_records)}회 기록됨")
                     st.write(f"**최초 발견일:** {first_record['date']}")
                     if pd.notnull(first_record.get('lat')):
                         st.write(f"**최초 위치:** ({first_record['lat']:.4f}, {first_record['lon']:.4f})")
                 else:
-                    # 미수집인 경우에도 정보와 배지는 표시
                     st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
-                    family = FAMILY_MAP.get(selected_name, '미상')
-                    st.caption(f"{family}")
+                    st.caption(f"{FAMILY_MAP.get(selected_name, '미상')}")
                     st.warning("🔒 아직 이 새를 만나지 못했습니다. (미발견)")
             
             if st.button("닫기 ✖️", key="close_detail"):
@@ -683,8 +686,8 @@ with tab2:
                 st.rerun()
         st.divider()
 
-    # 3. 페이지네이션 설정 (1번 ~ 602번)
-    items_per_page = 20 # 한 페이지에 20개씩 (5x4)
+    # 3. 페이지네이션 설정
+    items_per_page = 20 
     total_pages = max(1, (max_bird_id - 1) // items_per_page + 1)
     
     col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
@@ -694,7 +697,7 @@ with tab2:
     start_idx = (page - 1) * items_per_page + 1
     end_idx = min(start_idx + items_per_page, max_bird_id + 1)
 
-    # 4. 그리드 뷰 렌더링 (가로 5열)
+    # 4. 그리드 뷰 렌더링
     num_columns = 5
     grid_cols = st.columns(num_columns)
 
@@ -704,123 +707,37 @@ with tab2:
         bird_name = ID_TO_NAME[current_id]
         is_caught = bird_name in my_collected_birds
         
+        # ⭐️ 도트 이미지 경로 확인
+        img_path = f"assets/sprites/{current_id}.png"
+        has_image = os.path.exists(img_path)
+        
         col_idx = i % num_columns
         
         with grid_cols[col_idx]:
             with st.container(border=True):
-                if is_caught:
-                    icon = get_family_emoji(bird_name)
-                    color = "#1b5e20"
-                    bg_color = "#e8f5e9"
+                # 이미지/이모지 출력 영역
+                if is_caught and has_image:
+                    st.image(img_path, use_container_width=True)
+                elif is_caught:
+                    # 사진이 없는 획득 새
+                    st.markdown(f"<div style='text-align:center; font-size:3rem; padding:10px;'>{get_family_emoji(bird_name)}</div>", unsafe_allow_html=True)
                 else:
-                    icon = "❓"
-                    color = "#999999"
-                    bg_color = "#f5f5f5"
+                    # 미발견
+                    st.markdown("<div style='text-align:center; font-size:3rem; padding:10px; color:#ccc;'>❓</div>", unsafe_allow_html=True)
                 
+                # 텍스트 정보 영역
+                color = "#1b5e20" if is_caught else "#999999"
                 st.markdown(f"""
-                <div style='text-align:center; padding:10px; background-color:{bg_color}; border-radius:10px;'>
-                    <span style='font-size:2rem;'>{icon}</span><br>
+                <div style='text-align:center;'>
                     <span style='font-size:0.8rem; color:#666;'>No.{current_id}</span><br>
                     <strong style='color:{color}; font-size:1rem;'>{bird_name if is_caught else '???'}</strong>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # ⭐️ 버튼 클릭 이벤트에 스크롤 플래그 추가
                 if st.button("자세히 보기", key=f"btn_{current_id}", use_container_width=True):
                     st.session_state['selected_bird_id'] = current_id
-                    st.session_state['scroll_to_top'] = True # 스크롤 트리거 활성화
+                    st.session_state['scroll_to_top'] = True 
                     st.rerun()
 
     st.caption(f"총 {max_bird_id}종 중 {start_idx} ~ {end_idx-1}번 표시")
-
-# --- [Tab 3] 업적 도감 ---
-with tab3:
-    st.subheader("🏆 업적 도감")
-    st.caption("탐조 활동을 통해 얻을 수 있는 모든 업적과 조건입니다.")
-    sorted_badges = sorted(ACHIEVEMENT_INFO.keys(), key=lambda x: ACHIEVEMENT_INFO[x]['rank'])
-    
-    for badge_name in sorted_badges:
-        info = ACHIEVEMENT_INFO[badge_name]
-        is_earned = badge_name in current_achievements
-        style = TIER_STYLE.get(info['tier'], TIER_STYLE['rare'])
-        
-        parts = badge_name.split(" ", 1)
-        icon_emoji = parts[0] if len(parts) > 0 else "🏅"
-        clean_name = parts[1] if len(parts) > 1 else badge_name
-        
-        border_color = style.get('border', '#e0e0e0')
-        bg_color = style['bg'] if is_earned else "#ffffff"
-        opacity = "1.0" if is_earned else "0.6"
-        grayscale = "0%" if is_earned else "100%"
-        text_color = "#333333" if is_earned else "#999999"
-        
-        st.markdown(f"""
-        <div style="
-            border: 2px solid {border_color};
-            background-color: {bg_color};
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            opacity: {opacity};
-            filter: grayscale({grayscale});
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        ">
-            <div style="font-size: 3rem; margin-right: 15px;">{icon_emoji}</div>
-            <div>
-                <div style="font-weight: bold; font-size: 1.1rem; color: {text_color};">
-                    {clean_name} <span style="font-size: 0.8rem; color: {style['color']}; border: 1px solid {style['color']}; border-radius: 5px; padding: 2px 5px; margin-left: 5px;">{style['label']}</span>
-                </div>
-                <div style="font-size: 0.9rem; color: #666;">{info['desc']}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-# --- [Tab 4] 🗺️ 탐조 지도 ---
-with tab4:
-    st.subheader("🗺️ 나만의 탐조 지도")
-    
-    if not df.empty and 'lat' in df.columns and 'lon' in df.columns:
-        map_df = df.dropna(subset=['lat', 'lon'])
-        
-        if not map_df.empty:
-            center_lat = map_df['lat'].mean()
-            center_lon = map_df['lon'].mean()
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
-            
-            LocateControl(auto_start=True).add_to(m)
-            Geocoder(add_marker=False).add_to(m)
-
-            marker_cluster = MarkerCluster().add_to(m)
-            
-            for idx, row in map_df.iterrows():
-                bird = row['bird_name']
-                date = row['date']
-                family_icon = get_family_emoji(bird)
-                
-                popup_html = f"""
-                <div style="width:150px; text-align:center;">
-                    <div style="font-size:20px;">{family_icon}</div>
-                    <b>{bird}</b><br>
-                    <span style="font-size:12px; color:#555;">{date}</span>
-                </div>
-                """
-                
-                folium.Marker(
-                    location=[row['lat'], row['lon']],
-                    popup=folium.Popup(popup_html, max_width=200),
-                    tooltip=bird
-                ).add_to(marker_cluster)
-            
-            st_folium(m, width='100%', height=500)
-            st.info(f"총 {len(map_df)}개의 위치 기록이 지도에 표시되었습니다.")
-            
-        else:
-            st.warning("📍 위치 정보가 포함된 기록이 없습니다. 사진을 등록할 때 위치를 추가해보세요!")
-            m_default = folium.Map(location=[36.5, 127.5], zoom_start=6)
-            LocateControl(auto_start=True).add_to(m_default)
-            st_folium(m_default, width='100%', height=400)
-    else:
-        st.info("아직 데이터가 없습니다.")
 
