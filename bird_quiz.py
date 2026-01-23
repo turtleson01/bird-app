@@ -138,35 +138,51 @@ RARE_LABEL = { "class1": "👑 멸종위기 1급", "class2": "⭐ 멸종위기 2
 @st.cache_data
 def load_bird_map():
     file_path = "data.csv"
-    if not os.path.exists(file_path): return {}, {}, 0, {}, {}
+    if not os.path.exists(file_path): return {}, {}, 0, {}, {}, {}
     encodings = ['utf-8-sig', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
             df = pd.read_csv(file_path, skiprows=2, header=None, encoding=enc)
             if df.shape[1] < 15: continue
-            bird_data = df.iloc[:, [4, 14]].copy()
-            bird_data.columns = ['name', 'family']
+            
+            # ⭐️ 수정됨: 0번 컬럼(No)도 함께 가져와서 원본 번호(602번까지)를 그대로 사용
+            bird_data = df.iloc[:, [0, 4, 14]].copy()
+            bird_data.columns = ['id', 'name', 'family']
             bird_data = bird_data.dropna()
+            
+            # ID 컬럼을 숫자로 변환
+            bird_data['id'] = pd.to_numeric(bird_data['id'], errors='coerce')
+            bird_data = bird_data.dropna(subset=['id'])
+            bird_data['id'] = bird_data['id'].astype(int)
+            
             bird_data['name'] = bird_data['name'].astype(str).str.strip()
             bird_data['family'] = bird_data['family'].astype(str).str.strip()
             filter_keywords = ['대표국명', '국명', 'Name', 'Family', '과']
             bird_data = bird_data[~bird_data['family'].isin(filter_keywords)]
-            total_species_count = len(bird_data)
-            bird_list = bird_data['name'].tolist()
-            name_to_no = {name: i + 1 for i, name in enumerate(bird_list)}
+            
+            # 번호 -> 이름 매핑 (602개 모두 보존)
+            id_to_name = dict(zip(bird_data['id'], bird_data['name']))
+            
+            # 이름 -> 번호 매핑 (중복 이름은 마지막 번호로 연결됨)
+            name_to_no = dict(zip(bird_data['name'], bird_data['id']))
             name_to_family = dict(zip(bird_data['name'], bird_data['family']))
+            
+            total_species_count = len(id_to_name)
+            
             family_groups = {}
             for index, row in bird_data.iterrows():
                 fam = row['family']
                 nm = row['name']
                 if fam not in family_groups: family_groups[fam] = []
                 family_groups[fam].append(nm)
+                
             family_total_counts = bird_data['family'].value_counts().to_dict()
-            return name_to_no, name_to_family, total_species_count, family_total_counts, family_groups
+            return name_to_no, name_to_family, total_species_count, family_total_counts, family_groups, id_to_name
         except Exception as e: continue
-    return {}, {}, 0, {}, {}
+    return {}, {}, 0, {}, {}, {}
 
-BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS, FAMILY_GROUPS = load_bird_map()
+# ⭐️ 수정됨: ID_TO_NAME(번호->이름)을 로드 함수에서 직접 받아옴
+BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS, FAMILY_GROUPS, ID_TO_NAME = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_gps_from_image(image):
@@ -432,7 +448,6 @@ with tab1:
             st.caption("돋보기 버튼으로 장소를 검색하거나 지도를 클릭하세요.")
             
             m = folium.Map(location=[36.5, 127.5], zoom_start=7)
-            # ⭐️ 기능 추가: 내 위치 + 검색기
             LocateControl(auto_start=False).add_to(m) # 수동 모드에서는 자동이동 끔 (선택권)
             Geocoder(add_marker=False).add_to(m) 
             
@@ -538,7 +553,6 @@ with tab1:
                                 st.warning("📍 위치 정보가 없습니다. 아래 지도에서 검색하거나 클릭하세요.")
                                 
                                 m_pick = folium.Map(location=[36.5, 127.5], zoom_start=7)
-                                # ⭐️ AI 분석 모드 지도에도 기능 추가
                                 LocateControl(auto_start=False).add_to(m_pick)
                                 Geocoder(add_marker=False).add_to(m_pick)
                                 
@@ -601,24 +615,18 @@ with tab1:
 with tab2:
     st.subheader("📜 탐조 도감 (전체 목록)")
 
-    # 1. 데이터 준비: ID 기준 전체 목록 생성 (1번 ~ 끝번)
-    if 'ID_TO_NAME' not in st.session_state and BIRD_MAP:
-        # BIRD_MAP(이름:번호)을 역산하여 (번호:이름) 딕셔너리 생성
-        st.session_state['ID_TO_NAME'] = {v: k for k, v in BIRD_MAP.items()}
+    # ⭐️ 수정됨: CSV의 실제 최대 ID 번호를 가져와서 끝 번호로 설정
+    max_bird_id = max(ID_TO_NAME.keys()) if ID_TO_NAME else 602
     
-    id_to_name = st.session_state.get('ID_TO_NAME', {})
-    total_birds_count = len(id_to_name)
-    
-    # 내가 수집한 새 목록 (빠른 검색을 위해 set으로 변환)
     my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
 
-    # 2. 선택된 새 상세 정보 뷰 (상단에 고정)
+    # 2. 선택된 새 상세 정보 뷰
     if 'selected_bird_id' not in st.session_state:
         st.session_state['selected_bird_id'] = None
 
     selected_id = st.session_state['selected_bird_id']
-    if selected_id and selected_id in id_to_name:
-        selected_name = id_to_name[selected_id]
+    if selected_id and selected_id in ID_TO_NAME:
+        selected_name = ID_TO_NAME[selected_id]
         is_caught = selected_name in my_collected_birds
         
         with st.container(border=True):
@@ -631,7 +639,6 @@ with tab2:
             
             with det_c2:
                 if is_caught:
-                    # 수집한 새의 정보 표시
                     my_records = df[df['bird_name'] == selected_name]
                     first_record = my_records.iloc[0]
                     
@@ -654,41 +661,40 @@ with tab2:
                 st.rerun()
         st.divider()
 
-    # 3. 페이지네이션 설정
-    items_per_page = 20 # 한 페이지에 20개씩 표시 (5x4 그리드)
-    total_pages = max(1, (total_birds_count - 1) // items_per_page + 1)
+    # 3. 페이지네이션 설정 (1번 ~ 602번)
+    items_per_page = 20 # 한 페이지에 20개씩 (5x4)
+    total_pages = max(1, (max_bird_id - 1) // items_per_page + 1)
     
     col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
     with col_p2:
         page = st.number_input("페이지 이동", min_value=1, max_value=total_pages, step=1, label_visibility="collapsed")
     
     start_idx = (page - 1) * items_per_page + 1
-    end_idx = min(start_idx + items_per_page, total_birds_count + 1)
+    end_idx = min(start_idx + items_per_page, max_bird_id + 1)
 
-    # ⭐️ 4. 그리드 뷰 렌더링 (가로 5열로 변경됨)
+    # 4. 그리드 뷰 렌더링 (가로 5열)
     num_columns = 5
     grid_cols = st.columns(num_columns)
 
-    # 현재 페이지에 해당하는 새 목록 루프
-    for i, current_id in enumerate(range(start_idx, end_idx)):
-        if current_id not in id_to_name: continue
-        bird_name = id_to_name[current_id]
+    # ⭐️ 수정됨: range를 돌 때 ID_TO_NAME에 없는 번호도 빈칸/더미로 처리하지 않고 건너뜁니다.
+    # 단, CSV 구조상 1~602가 거의 다 채워져 있으므로 602칸이 유지됩니다.
+    valid_ids_on_page = [i for i in range(start_idx, end_idx) if i in ID_TO_NAME]
+    
+    for i, current_id in enumerate(valid_ids_on_page):
+        bird_name = ID_TO_NAME[current_id]
         is_caught = bird_name in my_collected_birds
         
-        # 그리드 열 배정
         col_idx = i % num_columns
         
         with grid_cols[col_idx]:
-            # 카드 스타일의 컨테이너
             with st.container(border=True):
-                # 아이콘/이미지 (수집 여부에 따라 다르게 표시)
                 if is_caught:
                     icon = get_family_emoji(bird_name)
-                    color = "#1b5e20" # 녹색 폰트
+                    color = "#1b5e20"
                     bg_color = "#e8f5e9"
                 else:
                     icon = "❓"
-                    color = "#999999" # 회색 폰트
+                    color = "#999999"
                     bg_color = "#f5f5f5"
                 
                 st.markdown(f"""
@@ -699,12 +705,11 @@ with tab2:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # 버튼 (클릭 시 상세 정보 표시)
                 if st.button("자세히 보기", key=f"btn_{current_id}", use_container_width=True):
                     st.session_state['selected_bird_id'] = current_id
                     st.rerun()
 
-    st.caption(f"총 {total_birds_count}종 중 {start_idx} ~ {end_idx-1}번 표시")
+    st.caption(f"총 {max_bird_id}종 중 {start_idx} ~ {end_idx-1}번 표시")
 
 # --- [Tab 3] 업적 도감 ---
 with tab3:
