@@ -10,6 +10,7 @@ import folium
 from streamlit_folium import st_folium
 # ⭐️ LocateControl 추가됨
 from folium.plugins import MarkerCluster, Geocoder, LocateControl
+import streamlit.components.v1 as components  # ⭐️ 스크롤 이동을 위한 JS 컴포넌트 추가
 
 # --- [1. 기본 설정] ---
 st.set_page_config(page_title="탐조 도감", layout="wide", page_icon="📚")
@@ -39,7 +40,8 @@ footer {visibility: hidden;}
 .stTabs [data-baseweb="tab-list"] { gap: 10px; }
 .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; border-radius: 5px; }
 
-.rare-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; vertical-align: middle; }
+/* ⭐️ 희귀종 태그 디자인 */
+.rare-tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; margin-left: 8px; vertical-align: middle; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 .tag-class1 { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
 .tag-class2 { background-color: #fff3e0; color: #ef6c00; border: 1px solid #ffcc80; }
 .tag-natural { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
@@ -145,7 +147,7 @@ def load_bird_map():
             df = pd.read_csv(file_path, skiprows=2, header=None, encoding=enc)
             if df.shape[1] < 15: continue
             
-            # ⭐️ 수정됨: 0번 컬럼(No)도 함께 가져와서 원본 번호(602번까지)를 그대로 사용
+            # ⭐️ 0번 컬럼(No)도 함께 가져와서 원본 번호(602번까지)를 그대로 사용
             bird_data = df.iloc[:, [0, 4, 14]].copy()
             bird_data.columns = ['id', 'name', 'family']
             bird_data = bird_data.dropna()
@@ -181,7 +183,6 @@ def load_bird_map():
         except Exception as e: continue
     return {}, {}, 0, {}, {}, {}
 
-# ⭐️ 수정됨: ID_TO_NAME(번호->이름)을 로드 함수에서 직접 받아옴
 BIRD_MAP, FAMILY_MAP, TOTAL_SPECIES_COUNT, FAMILY_TOTAL_COUNTS, FAMILY_GROUPS, ID_TO_NAME = load_bird_map()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -615,10 +616,18 @@ with tab1:
 with tab2:
     st.subheader("📜 탐조 도감 (전체 목록)")
 
-    # ⭐️ 수정됨: CSV의 실제 최대 ID 번호를 가져와서 끝 번호로 설정
     max_bird_id = max(ID_TO_NAME.keys()) if ID_TO_NAME else 602
-    
     my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
+
+    # 1. 자동 스크롤 트리거 (버튼 클릭 시 실행)
+    if 'scroll_to_top' in st.session_state and st.session_state['scroll_to_top']:
+        # Streamlit iframe 외부(부모 창)의 스크롤을 최상단으로 이동
+        components.html("""
+            <script>
+                window.parent.scrollTo({ top: 0, behavior: 'smooth' });
+            </script>
+        """, height=0)
+        st.session_state['scroll_to_top'] = False # 실행 후 플래그 초기화
 
     # 2. 선택된 새 상세 정보 뷰
     if 'selected_bird_id' not in st.session_state:
@@ -638,11 +647,20 @@ with tab2:
                     st.markdown("<div style='text-align:center; font-size:5rem; color:#ccc;'>❓</div>", unsafe_allow_html=True)
             
             with det_c2:
+                # ⭐️ 멸종위기종/천연기념물 태그 HTML 생성
+                rarity_badge = ""
+                if selected_name in RARE_BIRDS:
+                    r_code = RARE_BIRDS[selected_name]
+                    r_label = RARE_LABEL.get(r_code, "")
+                    r_class = f"tag-{r_code}" # CSS 클래스 (tag-class1, tag-class2, tag-natural)
+                    rarity_badge = f"<span class='rare-tag {r_class}'>{r_label}</span>"
+
                 if is_caught:
                     my_records = df[df['bird_name'] == selected_name]
                     first_record = my_records.iloc[0]
                     
-                    st.markdown(f"### No.{selected_id} {selected_name}")
+                    # 제목 옆에 배지 표시
+                    st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
                     family = FAMILY_MAP.get(selected_name, '미상')
                     st.caption(f"{family}")
                     
@@ -651,7 +669,8 @@ with tab2:
                     if pd.notnull(first_record.get('lat')):
                         st.write(f"**최초 위치:** ({first_record['lat']:.4f}, {first_record['lon']:.4f})")
                 else:
-                    st.markdown(f"### No.{selected_id} {selected_name}")
+                    # 미수집인 경우에도 정보와 배지는 표시
+                    st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
                     family = FAMILY_MAP.get(selected_name, '미상')
                     st.caption(f"{family}")
                     st.warning("🔒 아직 이 새를 만나지 못했습니다. (미발견)")
@@ -676,8 +695,6 @@ with tab2:
     num_columns = 5
     grid_cols = st.columns(num_columns)
 
-    # ⭐️ 수정됨: range를 돌 때 ID_TO_NAME에 없는 번호도 빈칸/더미로 처리하지 않고 건너뜁니다.
-    # 단, CSV 구조상 1~602가 거의 다 채워져 있으므로 602칸이 유지됩니다.
     valid_ids_on_page = [i for i in range(start_idx, end_idx) if i in ID_TO_NAME]
     
     for i, current_id in enumerate(valid_ids_on_page):
@@ -705,8 +722,10 @@ with tab2:
                 </div>
                 """, unsafe_allow_html=True)
                 
+                # ⭐️ 버튼 클릭 이벤트에 스크롤 플래그 추가
                 if st.button("자세히 보기", key=f"btn_{current_id}", use_container_width=True):
                     st.session_state['selected_bird_id'] = current_id
+                    st.session_state['scroll_to_top'] = True # 스크롤 트리거 활성화
                     st.rerun()
 
     st.caption(f"총 {max_bird_id}종 중 {start_idx} ~ {end_idx-1}번 표시")
@@ -767,7 +786,6 @@ with tab4:
             center_lon = map_df['lon'].mean()
             m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
             
-            # ⭐️ 기능 추가: 내 위치 자동이동(True) + 검색기
             LocateControl(auto_start=True).add_to(m)
             Geocoder(add_marker=False).add_to(m)
 
@@ -798,7 +816,6 @@ with tab4:
         else:
             st.warning("📍 위치 정보가 포함된 기록이 없습니다. 사진을 등록할 때 위치를 추가해보세요!")
             m_default = folium.Map(location=[36.5, 127.5], zoom_start=6)
-            # 데이터 없어도 내 위치 기능은 활성화
             LocateControl(auto_start=True).add_to(m_default)
             st_folium(m_default, width='100%', height=400)
     else:
