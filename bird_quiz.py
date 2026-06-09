@@ -191,7 +191,7 @@ def get_data():
 def save_data(bird_name, sex, current_df):
     bird_name = bird_name.strip()
     if bird_name not in BIRD_MAP: return f"⚠️ '{bird_name}'은(는) 목록에 없습니다."
-    if not current_df.empty and bird_name in current_df['bird_name'].values: return "이미 등록된 새입니다."
+    if not current_df.empty energy_bird_name in current_df['bird_name'].values: return "이미 등록된 새입니다."
     try:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         real_no = BIRD_MAP.get(bird_name)
@@ -235,19 +235,6 @@ def calculate_achievements(df):
     if rare_count >= 10: achievements.append("🛡️ 자연의 수호자")
     
     return achievements
-
-def get_family_emoji(bird_name):
-    if bird_name not in FAMILY_MAP: return "🐦"
-    family = FAMILY_MAP[bird_name]
-    if "오리" in family or "기러기" in family or "고니" in family: return "🦆"
-    if "수리" in family or "매과" in family: return "🦅"
-    if "올빼미" in family: return "🦉"
-    if "백로" in family or "왜가리" in family or "두루미" in family or "황새" in family: return "🦢"
-    if "닭" in family or "꿩" in family: return "🐓"
-    if "비둘기" in family: return "🕊️"
-    if "딱다구리" in family: return "🪵"
-    if "도요" in family or "물떼새" in family: return "🏖️"
-    return "🐦"
 
 def calculate_xp_and_level(df, achievements):
     total_xp = 0
@@ -463,7 +450,7 @@ with tab1:
 
                 with st.container(border=True):
                     c1, c2 = st.columns([1, 1.5])
-                    with c1: st.image(file, use_container_width=True) # ⭐️ AI 분석 사진 다시 복구
+                    with c1: st.image(file, use_container_width=True) 
                     with c2:
                         if is_valid_bird:
                             display_name = bird_name
@@ -528,7 +515,7 @@ with tab2:
     max_bird_id = max(ID_TO_NAME.keys()) if ID_TO_NAME else 602
     my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
 
-    # 2. 선택된 새 상세 정보 뷰 (⭐️ 큰 이모지 제거 및 단일 컬럼으로 수정)
+    # 2. 선택된 새 상세 정보 뷰 (상단 고정)
     if 'selected_bird_id' not in st.session_state:
         st.session_state['selected_bird_id'] = None
 
@@ -566,7 +553,7 @@ with tab2:
                 st.rerun()
         st.divider()
 
-    # 3. 전체 목록 렌더링
+    # 3. 전체 목록 렌더링 (⭐️ 낱개 카드 내부의 아이콘/이모지 완전 제거)
     num_columns = 8
     grid_cols = st.columns(num_columns)
     
@@ -581,18 +568,16 @@ with tab2:
         with grid_cols[col_idx]:
             with st.container(border=True):
                 if is_caught:
-                    icon = get_family_emoji(bird_name)
                     color = "#1b5e20"
                     bg_color = "#e8f5e9"
                 else:
-                    icon = "❓"
                     color = "#999999"
                     bg_color = "#f5f5f5"
                 
+                # ⭐️ 기존 {icon}을 빼고 텍스트 패딩만 유지하여 극도로 콤팩트하게 마크다운 배치
                 st.markdown(f"""
-                <div style='text-align:center; padding:5px; background-color:{bg_color}; border-radius:8px;'>
-                    <span style='font-size:1.5rem;'>{icon}</span><br>
-                    <span style='font-size:0.7rem; color:#666;'>No.{current_id}</span><br>
+                <div style='text-align:center; padding:8px 4px; background-color:{bg_color}; border-radius:6px;'>
+                    <span style='font-size:0.75rem; color:#666;'>No.{current_id}</span><br>
                     <strong style='color:{color}; font-size:0.85rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{bird_name if is_caught else '???'}</strong>
                 </div>
                 """, unsafe_allow_html=True)
