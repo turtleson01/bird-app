@@ -191,7 +191,7 @@ def get_data():
 def save_data(bird_name, sex, current_df):
     bird_name = bird_name.strip()
     if bird_name not in BIRD_MAP: return f"⚠️ '{bird_name}'은(는) 목록에 없습니다."
-    if not current_df.empty energy_bird_name in current_df['bird_name'].values: return "이미 등록된 새입니다."
+    if not current_df.empty and bird_name in current_df['bird_name'].values: return "이미 등록된 새입니다."
     try:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         real_no = BIRD_MAP.get(bird_name)
