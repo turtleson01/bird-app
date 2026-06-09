@@ -203,13 +203,6 @@ def save_data(bird_name, sex, current_df):
         return True
     except Exception as e: return str(e)
 
-def delete_birds(bird_names_to_delete, current_df):
-    try:
-        df = current_df[~current_df['bird_name'].isin(bird_names_to_delete)]
-        conn.update(spreadsheet=SHEET_URL, data=df)
-        return True
-    except Exception as e: return str(e)
-
 def calculate_achievements(df):
     achievements = []
     count = len(df)
@@ -390,7 +383,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 탭 메뉴 (지도 탭 삭제됨)
+# 탭 메뉴
 tab1, tab2, tab3 = st.tabs(["✍️ 종 추가", "📜 나의 도감", "🏆 업적 도감"])
 
 # --- [Tab 1] 종 추가 ---
@@ -470,7 +463,7 @@ with tab1:
 
                 with st.container(border=True):
                     c1, c2 = st.columns([1, 1.5])
-                    with c1: st.image(file, use_container_width=True)
+                    with c1: st.image(file, use_container_width=True) # ⭐️ AI 분석 사진 다시 복구
                     with c2:
                         if is_valid_bird:
                             display_name = bird_name
@@ -535,7 +528,7 @@ with tab2:
     max_bird_id = max(ID_TO_NAME.keys()) if ID_TO_NAME else 602
     my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
 
-    # 2. 선택된 새 상세 정보 뷰 (화면 상단 고정)
+    # 2. 선택된 새 상세 정보 뷰 (⭐️ 큰 이모지 제거 및 단일 컬럼으로 수정)
     if 'selected_bird_id' not in st.session_state:
         st.session_state['selected_bird_id'] = None
 
@@ -545,47 +538,38 @@ with tab2:
         is_caught = selected_name in my_collected_birds
         
         with st.container(border=True):
-            det_c1, det_c2 = st.columns([1, 3])
-            with det_c1:
-                if is_caught:
-                    st.markdown(f"<div style='text-align:center; font-size:5rem;'>{get_family_emoji(selected_name)}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div style='text-align:center; font-size:5rem; color:#ccc;'>❓</div>", unsafe_allow_html=True)
-            
-            with det_c2:
-                rarity_badge = ""
-                if selected_name in RARE_BIRDS:
-                    r_code = RARE_BIRDS[selected_name]
-                    r_label = RARE_LABEL.get(r_code, "")
-                    r_class = f"tag-{r_code}"
-                    rarity_badge = f"<span class='rare-tag {r_class}'>{r_label}</span>"
+            rarity_badge = ""
+            if selected_name in RARE_BIRDS:
+                r_code = RARE_BIRDS[selected_name]
+                r_label = RARE_LABEL.get(r_code, "")
+                r_class = f"tag-{r_code}"
+                rarity_badge = f"<span class='rare-tag {r_class}'>{r_label}</span>"
 
-                if is_caught:
-                    my_records = df[df['bird_name'] == selected_name]
-                    first_record = my_records.iloc[0]
-                    
-                    st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
-                    family = FAMILY_MAP.get(selected_name, '미상')
-                    st.caption(f"{family}")
-                    
-                    st.success(f"✅ **발견!** 총 {len(my_records)}회 기록됨")
-                    st.write(f"**최초 발견일:** {first_record['date']}")
-                else:
-                    st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
-                    family = FAMILY_MAP.get(selected_name, '미상')
-                    st.caption(f"{family}")
-                    st.warning("🔒 아직 이 새를 만나지 못했습니다. (미발견)")
-            
+            if is_caught:
+                my_records = df[df['bird_name'] == selected_name]
+                first_record = my_records.iloc[0]
+                
+                st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
+                family = FAMILY_MAP.get(selected_name, '미상')
+                st.caption(f"{family}")
+                
+                st.success(f"✅ **발견!** 총 {len(my_records)}회 기록됨")
+                st.write(f"**최초 발견일:** {first_record['date']}")
+            else:
+                st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
+                family = FAMILY_MAP.get(selected_name, '미상')
+                st.caption(f"{family}")
+                st.warning("🔒 아직 이 새를 만나지 못했습니다. (미발견)")
+        
             if st.button("상세 정보 닫기 ✖️", key="close_detail"):
                 st.session_state['selected_bird_id'] = None
                 st.rerun()
         st.divider()
 
-    # 3. 전체 목록 렌더링 (페이지네이션 제거, 가로 8열 배열)
+    # 3. 전체 목록 렌더링
     num_columns = 8
     grid_cols = st.columns(num_columns)
     
-    # 1번부터 끝 번호까지 한 번에 표시
     all_valid_ids = [i for i in range(1, max_bird_id + 1) if i in ID_TO_NAME]
     
     for i, current_id in enumerate(all_valid_ids):
@@ -605,7 +589,6 @@ with tab2:
                     color = "#999999"
                     bg_color = "#f5f5f5"
                 
-                # 카드 크기와 폰트 조절하여 압축
                 st.markdown(f"""
                 <div style='text-align:center; padding:5px; background-color:{bg_color}; border-radius:8px;'>
                     <span style='font-size:1.5rem;'>{icon}</span><br>
