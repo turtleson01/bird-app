@@ -507,84 +507,34 @@ with tab1:
                 placeholder.empty()
                 st.session_state.add_message = None
 
-# --- [Tab 2] 나의 도감 (한눈에 보기 뷰) ---
+# --- [Tab 2] 나의 도감 (심플 텍스트 리스트 뷰) ---
 with tab2:
     st.subheader("📜 탐조 도감 (전체 목록)")
 
     # 1. 데이터 준비
     max_bird_id = max(ID_TO_NAME.keys()) if ID_TO_NAME else 602
     my_collected_birds = set(df['bird_name'].tolist()) if not df.empty else set()
-
-    # 2. 선택된 새 상세 정보 뷰 (상단 고정)
-    if 'selected_bird_id' not in st.session_state:
-        st.session_state['selected_bird_id'] = None
-
-    selected_id = st.session_state['selected_bird_id']
-    if selected_id and selected_id in ID_TO_NAME:
-        selected_name = ID_TO_NAME[selected_id]
-        is_caught = selected_name in my_collected_birds
-        
-        with st.container(border=True):
-            rarity_badge = ""
-            if selected_name in RARE_BIRDS:
-                r_code = RARE_BIRDS[selected_name]
-                r_label = RARE_LABEL.get(r_code, "")
-                r_class = f"tag-{r_code}"
-                rarity_badge = f"<span class='rare-tag {r_class}'>{r_label}</span>"
-
-            if is_caught:
-                my_records = df[df['bird_name'] == selected_name]
-                first_record = my_records.iloc[0]
-                
-                st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
-                family = FAMILY_MAP.get(selected_name, '미상')
-                st.caption(f"{family}")
-                
-                st.success(f"✅ **발견!** 총 {len(my_records)}회 기록됨")
-                st.write(f"**최초 발견일:** {first_record['date']}")
-            else:
-                st.markdown(f"### No.{selected_id} {selected_name} {rarity_badge}", unsafe_allow_html=True)
-                family = FAMILY_MAP.get(selected_name, '미상')
-                st.caption(f"{family}")
-                st.warning("🔒 아직 이 새를 만나지 못했습니다. (미발견)")
-        
-            if st.button("상세 정보 닫기 ✖️", key="close_detail"):
-                st.session_state['selected_bird_id'] = None
-                st.rerun()
-        st.divider()
-
-    # 3. 전체 목록 렌더링 (⭐️ 낱개 카드 내부의 아이콘/이모지 완전 제거)
-    num_columns = 8
-    grid_cols = st.columns(num_columns)
+    
+    # 2. 4열 심플 텍스트 리스트 렌더링
+    num_columns = 4
+    cols = st.columns(num_columns)
+    cols_html = [""] * num_columns
     
     all_valid_ids = [i for i in range(1, max_bird_id + 1) if i in ID_TO_NAME]
     
     for i, current_id in enumerate(all_valid_ids):
         bird_name = ID_TO_NAME[current_id]
         is_caught = bird_name in my_collected_birds
-        
         col_idx = i % num_columns
         
-        with grid_cols[col_idx]:
-            with st.container(border=True):
-                if is_caught:
-                    color = "#1b5e20"
-                    bg_color = "#e8f5e9"
-                else:
-                    color = "#999999"
-                    bg_color = "#f5f5f5"
-                
-                # ⭐️ 기존 {icon}을 빼고 텍스트 패딩만 유지하여 극도로 콤팩트하게 마크다운 배치
-                st.markdown(f"""
-                <div style='text-align:center; padding:8px 4px; background-color:{bg_color}; border-radius:6px;'>
-                    <span style='font-size:0.75rem; color:#666;'>No.{current_id}</span><br>
-                    <strong style='color:{color}; font-size:0.85rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{bird_name if is_caught else '???'}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                if st.button("보기", key=f"btn_{current_id}", use_container_width=True):
-                    st.session_state['selected_bird_id'] = current_id
-                    st.rerun()
+        # 카드 디자인 걷어내고 순수 텍스트만 나열
+        if is_caught:
+            cols_html[col_idx] += f"<div style='margin-bottom:6px; font-size:1rem; color:#1b5e20;'><b>No.{current_id}</b> {bird_name}</div>"
+        else:
+            cols_html[col_idx] += f"<div style='margin-bottom:6px; font-size:1rem; color:#999;'>No.{current_id} ???</div>"
+            
+    for i in range(num_columns):
+        cols[i].markdown(cols_html[i], unsafe_allow_html=True)
 
 # --- [Tab 3] 업적 도감 ---
 with tab3:
